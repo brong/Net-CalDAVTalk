@@ -18,6 +18,10 @@ WriteMakefile(
         'Test::More' => 0,
     },
     PREREQ_PM => {
+        'Data::ICal::TimeZone' => '1.23',
+        'DateTime::Format::ICal' => '0.09',
+        'Text::LevenshteinXS' => '0.03',
+        'Text::VCardFast' => '0.06',
         #'ABC'              => 1.6,
         #'Foo::Bar::Module' => 5.0401,
     },
