@@ -89,7 +89,7 @@ BEGIN {
     inclusions
     alerts
     attendees
-    organiser
+    organizer
     attachments
   };
 
@@ -1595,15 +1595,15 @@ sub _getEventsFromVCalendar {
         push @Attendees, \%Attendee;
       }
 
-      my $Organiser;
-      for my $VOrganiser (@{$VEvent->{properties}{organizer} || []}) {
-        next unless $VOrganiser->{value};
-        $VOrganiser->{value} =~ s/^mailto://i;
-        my %Organiser = (
-          email => $VOrganiser->{value},
+      my $Organizer;
+      for my $VOrganizer (@{$VEvent->{properties}{organizer} || []}) {
+        next unless $VOrganizer->{value};
+        $VOrganizer->{value} =~ s/^mailto://i;
+        my %Organizer = (
+          email => $VOrganizer->{value},
         );
-        $Organiser{name} = $VOrganiser->{params}{cn}[0] // "";
-        $Organiser = \%Organiser;
+        $Organizer{name} = $VOrganizer->{params}{cn}[0] // "";
+        $Organizer = \%Organizer;
       }
 
       # }}}
@@ -1656,7 +1656,7 @@ sub _getEventsFromVCalendar {
         recurrence      => (%Recurrence ? \%Recurrence : $JSON::null),
         exceptions      => (%Exceptions ? \%Exceptions : $JSON::null),
         inclusions      => (@Inclusions ? \@Inclusions : $JSON::null),
-        organiser       => $Organiser,
+        organizer       => $Organizer,
         attendees       => (@Attendees ? \@Attendees : $JSON::null),
         alerts          => (@Alerts ? \@Alerts : $JSON::null),
         attachments     => (@Attachments ? \@Attachments : $JSON::null),
@@ -2023,14 +2023,14 @@ sub _argsToVEvents {
     }
   }
 
-  if ($Args->{organiser}) {
-    my $Email = $Args->{organiser}{email};
-    my $Name = $Args->{organiser}{name};
+  if ($Args->{organizer}) {
+    my $Email = $Args->{organizer}{email};
+    my $Name = $Args->{organizer}{name};
 
-    my %OrganiserProps;
-    $OrganiserProps{CN} = $Name if $Name;
+    my %OrganizerProps;
+    $OrganizerProps{CN} = $Name if $Name;
 
-    $VEvent->add_property(organizer => [ "MAILTO:$Email", \%OrganiserProps ]);
+    $VEvent->add_property(organizer => [ "MAILTO:$Email", \%OrganizerProps ]);
   }
 
   if ($Args->{attachments}) {
@@ -2428,7 +2428,7 @@ sub _stripNonICal {
 
   delete $Event->{alerts};
   delete $Event->{attendees};
-  delete $Event->{organiser};
+  delete $Event->{organizer};
 
   foreach my $exception (values %{$Event->{exceptions}}) {
     next unless $exception;
