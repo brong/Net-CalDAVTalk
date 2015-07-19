@@ -1295,14 +1295,14 @@ sub _getEventsFromVCalendar {
       my ($IsAllDay, $Start, $StartTimeZone, $End, $EndTimeZone) = ('') x 5;
 
       if (defined $Properties{dtstart}{value}) {
-        ($Start, $StartTimeZone, $IsAllDay) = $Self->_getDateObj($Calendar, $Properties{dtstart}, 'UTC');
+        ($Start, $StartTimeZone, $IsAllDay) = $Self->_getDateObj($Calendar, $Properties{dtstart});
 
         if (defined $Properties{dtend}{value}) {
           if (defined $Properties{duration}{value}) {
             confess "$uid: DTEND and DURATION cannot both be set";
           }
 
-          ($End, $EndTimeZone) = $Self->_getDateObj($Calendar, $Properties{dtend}, 'UTC');
+          ($End, $EndTimeZone) = $Self->_getDateObj($Calendar, $Properties{dtend});
 
           if ($IsAllDay and $Start->iso8601() eq $End->iso8601()) {
             # make zero-length event longer
