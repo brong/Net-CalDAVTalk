@@ -389,20 +389,20 @@ sub DeleteCalendar {
 }
 
 sub _fixColour {
-  my $colour = lc(shift || '');
+  my $color = lc(shift || '');
 
-  return $colour if $ColourNames{$colour};
-  return $DefaultCalendarColour unless $colour =~ m/^(\#[a-f0-9]{3,8})$/;
-  return uc($colour) if length($colour) == 7;
+  return $color if $ColourNames{$colour};
+  return $DefaultCalendarColour unless $color =~ m/^(\#[a-f0-9]{3,8})$/;
+  return uc($color) if length($colour) == 7;
 
   # Optional digit is for transparency (RGBA)
-  if ( $colour =~ m/^#(.)(.)(.).?$/ ) {
+  if ( $color =~ m/^#(.)(.)(.).?$/ ) {
     return uc "#$1$1$2$2$3$3";
   }
 
   # Last two digits are for transparency (RGBA)
-  if ( length($colour) == 9 ) {
-    return uc(substr($colour,0,7));
+  if ( length($color) == 9 ) {
+    return uc(substr($color,0,7));
   }
 
   return $DefaultCalendarColour;
@@ -549,7 +549,7 @@ sub GetCalendars {
         id         => $calendarId,
         name       => ($Propstat->{"{$NS_D}prop"}{"{$NS_D}displayname"}{content} || $DefaultDisplayName),
         href       => $href,
-        colour     => _fixColour($Propstat->{"{$NS_D}prop"}{"{$NS_A}calendar-color"}{content}),
+        color     => _fixColour($Propstat->{"{$NS_D}prop"}{"{$NS_A}calendar-color"}{content}),
         isVisible  => $isVisible,
         precedence => int($Propstat->{"{$NS_D}prop"}{"{$NS_A}calendar-order"}{content} || 1),
         syncToken  => ($Propstat->{"{$NS_D}prop"}{"{$NS_D}sync-token"}{content} || ''),
@@ -591,8 +591,8 @@ sub NewCalendar {
     push @Properties, x('C:X-FM-isVisible', ($Args->{isVisible} ? 1 : 0));
   }
 
-  if (exists $Args->{colour}) {
-    push @Properties, x('A:calendar-color', _fixColour($Args->{colour}));
+  if (exists $Args->{color}) {
+    push @Properties, x('A:calendar-color', _fixColour($Args->{color}));
   }
 
   if (exists $Args->{precedence}) {
@@ -636,8 +636,8 @@ sub UpdateCalendar {
     push @Params, x('D:displayname', $Calendar{name});
   }
 
-  if (defined $Calendar{colour}) {
-    push @Params, x('A:calendar-color', _fixColour($Calendar{colour}));
+  if (defined $Calendar{color}) {
+    push @Params, x('A:calendar-color', _fixColour($Calendar{color}));
   }
 
   if (exists $Calendar{isVisible}) {
@@ -2316,7 +2316,7 @@ sub GetICal {
     my $VCalendar = $Self->_argsToVCalendar($Events,
       method => 'PUBLISH',
       'x-wr-calname' => $Cal->{name},
-      'x-apple-calendar-color' => $Cal->{colour},
+      'x-apple-calendar-color' => $Cal->{color},
       # XXX - do we want to add our sync-token here or something?
     );
     return ($VCalendar->as_string(), $Cal);
