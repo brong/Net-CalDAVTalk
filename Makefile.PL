@@ -19,6 +19,7 @@ WriteMakefile(
     },
     PREREQ_PM => {
         'Data::ICal::TimeZone' => '1.23',
+	'DateTime::Format::ISO8601' => '0.08',
         'DateTime::Format::ICal' => '0.09',
         'Text::LevenshteinXS' => '0.03',
         'Text::VCardFast' => '0.06',

@@ -80,9 +80,9 @@ BEGIN {
     location
     showAsFree
     isAllDay
-    utcStart
+    start
     startTimeZone
-    utcEnd
+    end
     endTimeZone
     recurrence
     exceptions
@@ -701,9 +701,9 @@ sub GetEvents {
     $TopLevel = 'C:calendar-multiget';
     $Filter = x('D:href', $Args{href});
   }
-  elsif ($Args{AlwaysRange} || $Args{utcStart} || $Args{utcEnd}) {
-    my $Start = _wireDate($Args{utcStart} || $BoT);
-    my $End = _wireDate($Args{utcEnd} || $EoT);
+  elsif ($Args{AlwaysRange} || $Args{after} || $Args{before}) {
+    my $Start = _wireDate($Args{after} || $BoT);
+    my $End = _wireDate($Args{before} || $EoT);
 
     $Filter = x('C:filter',
       x('C:comp-filter', { name => 'VCALENDAR' },
@@ -820,9 +820,9 @@ sub GetFreeBusy {
   confess "Need a calendarId" unless $calendarId;
 
   my @Query;
-  if ($Args{AlwaysRange} || $Args{utcStart} || $Args{utcEnd}) {
-    my $Start = _wireDate($Args{utcStart} || $BoT);
-    my $End = _wireDate($Args{utcEnd} || $EoT);
+  if ($Args{AlwaysRange} || $Args{after} || $Args{before}) {
+    my $Start = _wireDate($Args{after} || $BoT);
+    my $End = _wireDate($Args{before} || $EoT);
 
     push @Query,
             x('C:time-range', {
@@ -863,8 +863,8 @@ sub GetFreeBusy {
       my $NewEvent = {
         startTimeZone => 'Etc/UTC',
         endTimeZone => 'Etc/UTC',
-        utcStart => $StartTime->iso8601(),
-        utcEnd => $EndTime->iso8601(),
+        start => $StartTime->iso8601(),
+        end => $EndTime->iso8601(),
         summary => ($Args{name} // ''),
         isAllDay => ($IsAllDay ? 1 : 0), 
       };
@@ -1649,8 +1649,8 @@ sub _getEventsFromVCalendar {
         location        => ($Properties{location}{value} || ''),
         showAsFree      => ($ShowAsFree ? $JSON::true : $JSON::false),
         isAllDay        => ($IsAllDay ? $JSON::true : $JSON::false),
-        utcStart        => (ref($Start) ? $Start->iso8601() : $JSON::null),
-        utcEnd          => (ref($End) ? $End->iso8601() : $JSON::null),
+        start           => (ref($Start) ? $Start->iso8601() : $JSON::null),
+        end             => (ref($End) ? $End->iso8601() : $JSON::null),
         startTimeZone   => ($IsAllDay ? $JSON::null : $StartTimeZone),
         endTimeZone     => ($IsAllDay ? $JSON::null : $EndTimeZone),
         recurrence      => (%Recurrence ? \%Recurrence : $JSON::null),
@@ -1894,20 +1894,20 @@ sub _argsToVEvents {
   $StartTimeZone ||= $EndTimeZone;
   $EndTimeZone   ||= $StartTimeZone;
 
-  if ($Args->{utcStart}) {
+  if ($Args->{start}) {
 
-    $VEvent->add_property(dtstart => $Self->_makeVTime($TimeZones, $Args->{utcStart}, $StartTimeZone, $Args->{isAllDay}));
+    $VEvent->add_property(dtstart => $Self->_makeVTime($TimeZones, $Args->{start}, $StartTimeZone, $Args->{isAllDay}));
 
-    if ($Args->{utcEnd}) {
-      $VEvent->add_property(dtend => $Self->_makeVTime($TimeZones, $Args->{utcEnd}, $EndTimeZone, $Args->{isAllDay}));
+    if ($Args->{end}) {
+      $VEvent->add_property(dtend => $Self->_makeVTime($TimeZones, $Args->{end}, $EndTimeZone, $Args->{isAllDay}));
 
-      if ($Args->{utcStart} gt $Args->{utcEnd}) {
-        confess "Start date is later than end date ($Args->{utcStart}, $Args->{utcEnd})";
+      if ($Args->{start} gt $Args->{end}) {
+        confess "Start date is later than end date ($Args->{start}, $Args->{end})";
       }
     }
   }
   elsif (not $recurrenceId) {
-    confess "no utcStart for event $Args->{id}";
+    confess "no start for event $Args->{id}";
   }
 
   if ($Args->{recurrence}) {
@@ -2345,21 +2345,21 @@ sub _minimise {
     delete $Recurrence->{created};
 
     # check if time range is identical (keep timezone until after we've done this)
-    if ($Recurrence->{utcStart}) {
+    if ($Recurrence->{start}) {
       my $tz = $Recurrence->{startTimeZone} // $Event->{startTimeZone};
       my $uDate = _wireDate($recurrenceId, $Self->tz($tz));
       $uDate->set_time_zone($UTC);
-      if ($uDate->iso8601() eq $Recurrence->{utcStart}) {
-        delete $Recurrence->{utcStart};
+      if ($uDate->iso8601() eq $Recurrence->{start}) {
+        delete $Recurrence->{start};
 
-        if ($Recurrence->{utcEnd}) {
-          die Data::Dumper::Dumper($Event) unless $Event->{utcStart};
-          my $start = _wireDate($Event->{utcStart}, $UTC);
-          my $end = _wireDate($Event->{utcEnd}, $UTC);
+        if ($Recurrence->{end}) {
+          die Data::Dumper::Dumper($Event) unless $Event->{start};
+          my $start = _wireDate($Event->{start}, $UTC);
+          my $end = _wireDate($Event->{end}, $UTC);
           my $diff = $end->subtract_datetime($start);
           $uDate->add_duration($diff);
-          if ($uDate->iso8601() eq $Recurrence->{utcEnd}) {
-            delete $Recurrence->{utcEnd};
+          if ($uDate->iso8601() eq $Recurrence->{end}) {
+            delete $Recurrence->{end};
           }
         }
       }
@@ -2389,16 +2389,16 @@ sub _maximise {
   # time is a special case - if it's set on the event, it MUST be the
   # actual recurrence's start and end time, not the original start and
   # end time.  We wind up doing date maths.  Yay.
-  unless (exists $Recurrence->{utcStart}) {
+  unless (exists $Recurrence->{start}) {
     my $tz = $Recurrence->{startTimeZone} // $Event->{startTimeZone};
     my $uDate = _wireDate($recurrenceId, $Self->tz($tz));
     $uDate->set_time_zone($UTC);
-    $Recurrence->{utcStart} = $uDate->iso8601();
+    $Recurrence->{start} = $uDate->iso8601();
   }
 
-  unless (exists $Recurrence->{utcEnd}) {
-    my $start = _wireDate($Event->{utcStart}, $UTC);
-    my $end = _wireDate($Event->{utcEnd}, $UTC);
+  unless (exists $Recurrence->{end}) {
+    my $start = _wireDate($Event->{start}, $UTC);
+    my $end = _wireDate($Event->{end}, $UTC);
     # length of the parent event
     my $diff = $end->subtract_datetime($start);
     # add to the recurrence ID time to see when the event would have ended
@@ -2406,7 +2406,7 @@ sub _maximise {
     my $uDate = _wireDate($recurrenceId, $Self->tz($tz));
     $uDate->set_time_zone($UTC);
     $uDate->add_duration($diff);
-    $Recurrence->{utcEnd} = $uDate->iso8601();
+    $Recurrence->{end} = $uDate->iso8601();
   }
 
   foreach my $key (sort keys %$Event) {
