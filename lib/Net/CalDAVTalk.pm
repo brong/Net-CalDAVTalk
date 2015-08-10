@@ -302,7 +302,7 @@ BEGIN {
 
 =head1 NAME
 
-Net::CalDAVTalk - The great new Net::CalDAVTalk!
+Net::CalDAVTalk - A library for talking to a CalDAV server
 
 =head1 VERSION
 
@@ -315,18 +315,38 @@ our $VERSION = '0.01';
 
 =head1 SYNOPSIS
 
-NOTE: documentation to follow - importing raw from FastMail repo first
+This module is the initial release of the code used at FastMail for talking
+to CalDAV servers.  It's quite specific to an early version of our API, so
+while it might be useful to others, it's being pushed to CPAN more because
+the Cassandane test suite needs it.
 
-Perhaps a little code snippet.
+See Net::DAVTalk for details on how to specify hosts and paths.
 
     use Net::CalDAVTalk;
 
-    my $foo = Net::CalDAVTalk->new();
-    ...
+    my $domain = $user;
+    $domain =~ s/.*\@//;
+
+    my $url;
+    my ($reply) = $Resolver->search("_caldavs._tcp.$domain", "srv");
+    if ($reply) {
+      my @d = $reply->answer;
+      if (@d) {
+        my $host = $d[0]->target();
+        my $port = $d[0]->port();
+        $url = "https://$host";
+        $url .= ":$port" unless $port eq 443;
+      }
+    }
+
+    my $foo = Net::CalDAVTalk->new(
+       user => $user,
+       password => $password,
+       url => $url,
+       expandurl => 1,
+    );
 
 =head1 SUBROUTINES/METHODS
-
-=head2 function1
 
 =cut
 
@@ -372,6 +392,16 @@ sub logger {
 }
 
 # Calendar methods
+
+=head2 $Cal->DeleteCalendar($calendarId)
+
+Delete the calendar with collection name $calendarId (full or relative path)
+
+e.g.
+
+    $Cal->DeleteCalendar('Default');
+
+=cut
 
 sub DeleteCalendar {
   my ($Self, $calendarId) = @_;
@@ -446,6 +476,23 @@ sub GetCalendar {
   my ($Calendar) = grep { $_->{id} eq $CalendarId } @$Calendars;
   return $Calendar;
 }
+
+=head2 $Cal->GetCalendars(%Args)
+
+Get a listing of all the calendars.  Returns an arrayref of hashrefs.
+
+e.g.
+
+    my $Calendars = $Cal->GetCalendars();
+    foreach my $Hash (@$Calendars) {
+        my $Events = $Cal->GetEvents($Hash->{id});
+    }
+
+Arguments:
+
+    Properties => hashref - which are requested, but not used.  Kinda pointless.
+
+=cut
 
 sub GetCalendars {
   my ($Self, %Args) = @_;
@@ -564,6 +611,20 @@ sub GetCalendars {
 
   return \@Calendars;
 }
+
+=head2 $Cal->NewCalendar($Args)
+
+Create a new calendar.  Takes a hashref of arguments.
+
+e.g.
+
+   my $calendarId = $Cal->NewCalendar({name => "Personal", color => "#ffcc00"});
+
+Arguments:
+
+    Properties => hashref - which are requested, but not used.  Kinda pointless.
+
+=cut
 
 sub NewCalendar {
   my ($Self, $Args) = @_;
@@ -2495,7 +2556,7 @@ L<http://search.cpan.org/dist/Net-CalDAVTalk/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2015 Bron Gondwana.
+Copyright 2015 FastMail Pty Ltd.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
