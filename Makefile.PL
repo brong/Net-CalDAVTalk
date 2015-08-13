@@ -19,6 +19,7 @@ WriteMakefile(
     },
     PREREQ_PM => {
         'Net::DAVTalk' => '0.02',
+        'DateTime::TimeZone' => 0,
         'Data::ICal::TimeZone' => '1.23',
         'DateTime::Format::ISO8601' => '0.08',
         'DateTime::Format::ICal' => '0.09',
