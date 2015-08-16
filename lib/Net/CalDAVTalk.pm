@@ -302,15 +302,15 @@ BEGIN {
 
 =head1 NAME
 
-Net::CalDAVTalk - A library for talking to a CalDAV server
+Net::CalDAVTalk - Module to talk CalDAV and give a JSON interface to the data
 
 =head1 VERSION
 
-Version 0.01
+Version 0.03
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 
 =head1 SYNOPSIS
@@ -322,7 +322,17 @@ the Cassandane test suite needs it.
 
 See Net::DAVTalk for details on how to specify hosts and paths.
 
-    use Net::CalDAVTalk;
+    my $CalDAV = Net::CalDAVTalk->new(
+        user => $service->user(),
+        password => $service->pass(),
+        host => $service->host(),
+        port => $service->port(),
+        scheme => 'http',
+        url => '/',
+        expandurl => 1,
+    );
+
+or using DNS:
 
     my $domain = $user;
     $domain =~ s/.*\@//;
@@ -339,6 +349,9 @@ See Net::DAVTalk for details on how to specify hosts and paths.
       }
     }
 
+This will use the '/.well-known/caldav' address to find the actual current user
+principal, and from there the calendar-home-set for further operations.
+
     my $foo = Net::CalDAVTalk->new(
        user => $user,
        password => $password,
@@ -346,11 +359,21 @@ See Net::DAVTalk for details on how to specify hosts and paths.
        expandurl => 1,
     );
 
+
 =head1 SUBROUTINES/METHODS
 
-=cut
+=head2 new(%args)
 
-# General methods
+Takes the same arguments as Net::DAVTalk and adds the caldav namespaces
+and some Cyrus specific namespaces for all XML requests.
+
+  A => 'http://apple.com/ns/ical/'
+  C => 'urn:ietf:params:xml:ns:caldav'
+  CY => 'http://cyrusimap.org/ns/'
+  UF => 'http://cyrusimap.org/ns/userflag/'
+  SF => 'http://cyrusimap.org/ns/sysflag/'
+
+=cut
 
 sub new {
   my ($Class, %Params) = @_;
@@ -370,6 +393,13 @@ sub new {
   return $Self;
 }
 
+=head2 $self->tz($name)
+
+Returns a DateTime::TimeZone object for the given name, but caches
+the result for speed.
+
+=cut
+
 sub tz {
   my $Self = shift;
   my $tzName = shift;
@@ -381,6 +411,21 @@ sub tz {
   return $Self->{_tz}{$tzName};
 }
 
+=head2 $self->logger(sub { })
+
+Sets a function to receive all log messages.  Gets called with the first
+argument being a level name, and then a list of items to log:
+
+e.g.
+
+   $CalDAV->logger(sub {
+      my $level = shift;
+      return if ($level eq 'debug' and not $ENV{DEBUG_CALDAV});
+      warn "LOG $level: $_\n" for @_;
+   });
+
+=cut
+
 sub logger {
   my $Self = shift;
 
@@ -391,7 +436,11 @@ sub logger {
   return $Self->{logger};
 }
 
-# Calendar methods
+=head2 $self->DeleteCalendar($calendarId)
+
+Delete the named calendar from the server (shorturl - see Net::DAVTalk)
+
+=cut
 
 =head2 $Cal->DeleteCalendar($calendarId)
 
@@ -438,36 +487,18 @@ sub _fixColour {
   return $DefaultCalendarColour;
 }
 
-sub GetPublicCalendars {
-  my ($Class, $URL) = @_;
 
-  $Class   = ref($Class) || $Class;
-  my $Self = $Class->new(url => $URL);
+=head2 $self->GetCalendar($calendarId)
 
-  my $Response = $Self->Request(
-    'GET',
-    '',
-  );
+Get a single calendar from the server by calendarId
+(currently implemented very inefficiently as a get
+of all calendars.  Returns undef if the calendar
+doesn't exist.
 
-  my $CalendarData = eval { vcard2hash($Response->{content}, only_one => 1) }
-    or confess "Error parsing VCalendar data: $@";
+e.g
+   my $Calendar = $CalDAV->GetCalendar('Default');
 
-  my @Calendars;
-
-  foreach my $CalendarData (@{$CalendarData->{objects} || []}) {
-    next unless $CalendarData->{type} eq 'vcalendar';
-
-    my %Calendar;
-
-    foreach my $Property (keys %{$CalendarData->{properties} ||{}}) {
-      $Calendar{$Property} = $CalendarData->{properties}{$Property}[0]{value};
-    }
-
-    push @Calendars, \%Calendar;
-  }
-
-  return \@Calendars;
-}
+=cut
 
 sub GetCalendar {
   my ($Self, $CalendarId) = @_;
@@ -477,20 +508,17 @@ sub GetCalendar {
   return $Calendar;
 }
 
-=head2 $Cal->GetCalendars(%Args)
+=head2 $self->GetCalendars(Properties => [])
 
-Get a listing of all the calendars.  Returns an arrayref of hashrefs.
+Fetch all the calendars on the server.  You can request additional
+properties, but they aren't parsed well yet.
 
-e.g.
+e.g
 
-    my $Calendars = $Cal->GetCalendars();
-    foreach my $Hash (@$Calendars) {
-        my $Events = $Cal->GetEvents($Hash->{id});
-    }
-
-Arguments:
-
-    Properties => hashref - which are requested, but not used.  Kinda pointless.
+   my $Calendars = $CalDAV->GetCalendars();
+   foreach my $Cal (@$Calendars) {
+      # do stuff
+   }
 
 =cut
 
@@ -612,17 +640,19 @@ sub GetCalendars {
   return \@Calendars;
 }
 
-=head2 $Cal->NewCalendar($Args)
+=head2 $self->NewCalendar($Args)
 
-Create a new calendar.  Takes a hashref of arguments.
+Create a new calendar.  The Args are the as the things returned by GetCalendars,
+except that if you don't provide 'id' (same as shorturl), then a UUID will be
+generated for you.  It's recommended to not provide 'id' unless you need to
+create a specific path for compatibility with other things, and to use 'name'
+to identify the calendar for users.  'name' is stored as DAV:displayname.
 
 e.g.
 
-   my $calendarId = $Cal->NewCalendar({name => "Personal", color => "#ffcc00"});
+   my $Id = $CalDAV->NewCalendar({name => 'My Calendar', color => 'aqua'});
 
-Arguments:
-
-    Properties => hashref - which are requested, but not used.  Kinda pointless.
+(Color names will be translated based on the CSS name list)
 
 =cut
 
@@ -676,6 +706,13 @@ sub NewCalendar {
 
   return $calendarId;
 }
+
+=head2 $self->UpdateCalendar($Args)
+
+Like 'NewCalendar', but updates an existing calendar, and 'id' is required.
+Returns the id, just like NewCalendar.
+
+=cut
 
 sub UpdateCalendar {
   my ($Self, $Args, $Prev) = @_;
@@ -732,6 +769,15 @@ sub UpdateCalendar {
 
 # Event methods
 
+=head2 $self->DeleteEvent($Event|$href)
+
+Given a single event or the href to the event, delete that event,
+delete it from the server.
+
+Returns true.
+
+=cut
+
 sub DeleteEvent {
   my ($Self) = shift;
   my ($Event) = @_;
@@ -747,6 +793,24 @@ sub DeleteEvent {
 
   return 1;
 }
+
+=head2 $self->GetEvents($calendarId, %Args)
+
+Fetches some or all of the events in a calendar.
+
+Supported args:
+
+  href => [] - perform a multi-get on just these fullpath urls.
+  after+before => ISO8601 - date range to query
+
+In scalar context returns an arrayref of events.  In list context
+returns both an arrayref of events and an arrayref of errors:
+
+e.g.
+
+    my ($Events, $Errors) = $CalDAV->GetEvents('Default');
+
+=cut
 
 sub GetEvents {
   my ($Self, $calendarId, %Args) = @_;
@@ -858,6 +922,12 @@ sub GetEvents {
   return wantarray ? (\@Events, \@Errors) : \@Events;
 }
 
+=head2 $self->GetEvent($href)
+
+Just get a single event (calls GetEvents with that href)
+
+=cut
+
 sub GetEvent {
   my ($Self, $href, %Args) = @_;
 
@@ -872,6 +942,15 @@ sub GetEvent {
 
   return $Events->[0];
 }
+
+=head2 $self->GetFreeBusy($calendarId, %Args)
+
+Like 'GetEvents' but uses a free-busy-query and then generates
+synthetic events out of the result.
+
+Doesn't have a 'href' parameter, just the before/after range.
+
+=cut
 
 sub GetFreeBusy {
   my ($Self, $calendarId, %Args) = @_;
@@ -940,6 +1019,21 @@ sub GetFreeBusy {
 
   return (\@result, \@errors);
 }
+
+=head2 $self->SyncEvents($calendarId, %Args)
+
+Like GetEvents, but if you pass a syncToken argument, then it will
+fetch changes since that token (obtained from an earlier GetCalendars
+call).
+
+In scalar context still just returns new events, in list context returns
+Events, Removed and Errors.
+
+e.g.
+
+   my ($Events, $Removed, $Errors) = $CalDAV->SyncEvents('Default', syncToken => '...');
+
+=cut
 
 sub SyncEvents {
   my ($Self, $calendarId, %Args) = @_;
@@ -1028,6 +1122,23 @@ sub SyncEvents {
   return wantarray ? (\@Events, \@Removed, \@Errors) : \@Events;
 }
 
+=head2 $self->NewEvent($calendarId, $Args)
+
+Create a new event in the named calendar.  If you don't specify 'uid' then
+a UUID will be created.  You should only specify the UID if you need to for
+syncing purposes - it's better to auto-generate otherwise.
+
+Returns the href, but also updates 'uid' in $Args.
+
+Also updates 'sequence'.
+
+e.g.
+
+    my $href = $CalDAV->NewEvent('Default', $Args);
+    my $newuid = $Args->{uid};
+
+=cut
+
 sub NewEvent {
   my ($Self, $calendarId, $Args) = @_;
 
@@ -1067,6 +1178,13 @@ sub NewEvent {
 
   return $href;
 }
+
+=head2 $self->UpdateEvent($href, $Args)
+
+Like NewEvent, but you only need to specify keys that you want to change,
+and it takes the full href to the card instead of the containing calendar.
+
+=cut
 
 sub UpdateEvent {
   my ($Self, $href, $Args) = @_;
@@ -1130,6 +1248,13 @@ sub _updateEvent {
   return ($OldEvent, \%NewEvent);
 }
 
+=head2 $self->AnnotateEvent($href, $Args)
+
+Instead of actually changing an event itself, use proppatch to
+add or remove properties on the event.
+
+=cut
+
 sub AnnotateEvent {
   my ($Self, $href, $Args) = @_;
 
@@ -1163,6 +1288,12 @@ sub AnnotateEvent {
 
   return 1;
 }
+
+=head2 $self->MoveEvent($href, $newCalendarId)
+
+Move an event into a new calendar.  Returns the new href.
+
+=cut
 
 sub MoveEvent {
   my ($Self, $href, $newCalendarId) = @_;
@@ -2301,6 +2432,20 @@ sub _makeRecurrence {
   return %Recurrence;
 }
 
+=head2 $self->vcalendarToEvents($Data)
+
+Convert a text vcalendar (either a single event or an entire ical file) into an array of events.
+
+Returns an array (not arrayref) of Events in UID order.
+
+e.g.
+
+    foreach my $Event ($CalDAV->vcalendarToEvents($Data)) {
+        # ...
+    }
+
+=cut
+
 sub vcalendarToEvents {
   my $Self = shift;
   my $Data = shift;
@@ -2358,6 +2503,13 @@ sub vcalendarToEvents {
 
   return map { $map{$_} } sort keys %map;
 }
+
+=head2 $self->GetICal($calendarId, $isFreeBusy)
+
+Given a calender, fetch all the events and generate an ical format file
+suitable for import into a client.
+
+=cut
 
 sub GetICal {
   my $Self = shift;
@@ -2429,7 +2581,7 @@ sub _minimise {
     # dupelim
     foreach my $Key (keys %$Recurrence) {
       delete $Recurrence->{$Key} if $Key =~ m/^_/;
-      delete $Recurrence->{$Key} if safeeq($Event->{$Key}, $Recurrence->{$Key});
+      delete $Recurrence->{$Key} if _safeeq($Event->{$Key}, $Recurrence->{$Key});
     }
 
     # no point sending if it's entirely empty
@@ -2497,7 +2649,7 @@ sub _stripNonICal {
   }
 }
 
-sub safeeq {
+sub _safeeq {
   my ($a, $b) = @_;
   return 1 if (not defined $a and not defined $b);
   return 0 if (not defined $a  or not defined $b);
