@@ -1,5 +1,10 @@
 Revision history for Net-CalDAVTalk
 
-0.01    Date/time
-        First version, released on an unsuspecting world.
+0.03    Mon Aug 17 10:08 2015
+  - Pull all documentation in, including doc for the TimeZones module
+
+0.02    Mon Aug 17 09:30 2015
+  - Initial release with POD coverage, but missing some commits
+
+0.01    never released
 
