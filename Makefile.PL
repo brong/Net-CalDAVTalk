@@ -27,6 +27,7 @@ WriteMakefile(
         'Text::VCardFast' => '0.06',
         'JSON' => 0,
         'JSON::XS' => 0,
+        'MIME::Types' => 0,
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean => { FILES => 'Net-CalDAVTalk-*' },
