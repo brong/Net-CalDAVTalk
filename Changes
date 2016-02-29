@@ -1,5 +1,9 @@
 Revision history for Net-CalDAVTalk
 
+0.04    Tue Mar  1 08:37 2016
+  - require MIME::Types
+  - Add support for 'timezone' property
+
 0.03    Mon Aug 17 10:08 2015
   - Pull all documentation in, including doc for the TimeZones module
 

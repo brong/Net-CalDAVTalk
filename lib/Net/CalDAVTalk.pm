@@ -306,11 +306,11 @@ Net::CalDAVTalk - Module to talk CalDAV and give a JSON interface to the data
 
 =head1 VERSION
 
-Version 0.03
+Version 0.04
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 
 =head1 SYNOPSIS
@@ -537,6 +537,7 @@ sub GetCalendars {
     'D:current-user-privilege-set',
     'D:acl',
     'A:calendar-order',
+    'C:calendar-timezone',
     'D:sync-token',
     'D:supported-report-set',
     @{$Args{Properties} || []},
@@ -624,7 +625,8 @@ sub GetCalendars {
         id         => $calendarId,
         name       => ($Propstat->{"{$NS_D}prop"}{"{$NS_D}displayname"}{content} || $DefaultDisplayName),
         href       => $href,
-        color     => _fixColour($Propstat->{"{$NS_D}prop"}{"{$NS_A}calendar-color"}{content}),
+        color      => _fixColour($Propstat->{"{$NS_D}prop"}{"{$NS_A}calendar-color"}{content}),
+        timezone   => $Propstat->{"{$NS_D}prop"}{"{$NS_C}calendar-timezone"}{content},
         isVisible  => $isVisible,
         precedence => int($Propstat->{"{$NS_D}prop"}{"{$NS_A}calendar-order"}{content} || 1),
         syncToken  => ($Propstat->{"{$NS_D}prop"}{"{$NS_D}sync-token"}{content} || ''),
@@ -686,6 +688,10 @@ sub NewCalendar {
     push @Properties, x('A:calendar-color', _fixColour($Args->{color}));
   }
 
+  if (exists $Args->{timezone}) {
+    push @Properties, x('C:calendar-timezone', $Args->{timezone});
+  }
+
   if (exists $Args->{precedence}) {
     unless (($Args->{precedence} // '') =~ /^\d+$/) {
       confess "Invalid precedence ($Args->{precedence}) (expected int >= 0)";
@@ -736,6 +742,10 @@ sub UpdateCalendar {
 
   if (defined $Calendar{color}) {
     push @Params, x('A:calendar-color', _fixColour($Calendar{color}));
+  }
+
+  if (exists $Args->{timezone}) {
+    push @Properties, x('C:calendar-timezone', $Args->{timezone});
   }
 
   if (exists $Calendar{isVisible}) {
