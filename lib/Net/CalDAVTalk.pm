@@ -471,7 +471,8 @@ sub _fixColour {
   my $color = lc(shift || '');
 
   return $color if $ColourNames{$color};
-  return $DefaultCalendarColour unless $color =~ m/^(\#[a-f0-9]{3,8})$/;
+  return $DefaultCalendarColour unless $color =~ m/^\s*(\#[a-f0-9]{3,8})\s*$/;
+  $color = $1;
   return uc($color) if length($color) == 7;
 
   # Optional digit is for transparency (RGBA)
