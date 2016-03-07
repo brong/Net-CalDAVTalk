@@ -746,7 +746,7 @@ sub UpdateCalendar {
   }
 
   if (exists $Args->{timezone}) {
-    push @Properties, x('C:calendar-timezone', $Args->{timezone});
+    push @Params, x('C:calendar-timezone', $Args->{timezone});
   }
 
   if (exists $Calendar{isVisible}) {
@@ -2540,6 +2540,7 @@ sub GetICal {
     my $VCalendar = $Self->_argsToVCalendar($Events,
       method => 'PUBLISH',
       'x-wr-calname' => $Cal->{name},
+      'x-wr-timezone' => $Cal->{timezone},
       'x-apple-calendar-color' => $Cal->{color},
       # XXX - do we want to add our sync-token here or something?
     );
