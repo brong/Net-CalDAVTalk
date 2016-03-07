@@ -2246,7 +2246,7 @@ sub _argsToVEvents {
       my %AttachProps;
       $AttachProps{FMTTYPE} = $Mime if defined $Mime;
       $AttachProps{SIZE} = $Size if defined $Size;
-      $AttachProps{NAME} = $FileName if defined $FileName;
+      $AttachProps{FILENAME} = $FileName if defined $FileName;
       $VEvent->add_property(attach => [ $Url, \%AttachProps ]);
     }
   }
