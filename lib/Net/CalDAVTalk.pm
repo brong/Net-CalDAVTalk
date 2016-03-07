@@ -946,7 +946,7 @@ sub GetEvent {
   my $calendarId = $href;
   $calendarId =~ s{/[^/]*$}{};
 
-  my ($Events, $Errors) = $Self->GetEvents($calendarId, href => $Self->fullpath($href));
+  my ($Events, $Errors) = $Self->GetEvents($calendarId, %Args, href => $Self->fullpath($href));
 
   die "Errors @$Errors" if @$Errors;
   die "Multiple items returned for $href" if @$Events > 1;
