@@ -2515,6 +2515,37 @@ sub vcalendarToEvents {
   return map { $map{$_} } sort keys %map;
 }
 
+=head2 $self->UpdateAddressSet($DisplayName, $EmailAddress)
+
+Set the address set and display name for the calendar user (if supported)
+
+=cut
+
+sub UpdateAddressSet {
+  my ($Self, $NewDisplayName, $NewAddressSet) = @_;
+
+  my ($DisplayName, $AddressSet) = $Self->GetProps(\$Self->{principal}, 'D:displayname', [ 'C:calendar-user-address-set', 'D:href' ]);
+
+  if (!$AddressSet || $AddressSet ne "mailto:" . $NewAddressSet ||
+      !$DisplayName || $DisplayName ne $NewDisplayName) {
+    $Self->Request(
+      'PROPPATCH',
+      "",
+      x('D:propertyupdate', $Self->NS(),
+        x('D:set',
+          x('D:prop',
+            x('D:displayname', $NewDisplayName),
+            x('C:calendar-user-address-set', "mailto:" . $NewAddressSet),
+          )
+        )
+      )
+    );
+    return 1;
+  }
+
+  return 0;
+}
+
 =head2 $self->GetICal($calendarId, $isFreeBusy)
 
 Given a calender, fetch all the events and generate an ical format file
