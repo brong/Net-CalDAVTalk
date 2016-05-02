@@ -1460,6 +1460,8 @@ sub _getEventsFromVCalendar {
   foreach my $Calendar (@{$CalendarData->{objects} || []}) {
     next unless lc $Calendar->{type} eq 'vcalendar';
 
+    my $method = $Calendar->{properties}{method}[0]{value};
+
     foreach my $VEvent (@{$Calendar->{objects} || []}) {
       next unless lc $VEvent->{type} eq 'vevent';
 
@@ -1886,6 +1888,8 @@ sub _getEventsFromVCalendar {
         my $Date = $Self->_getDateObj($Calendar, $Properties{'recurrence-id'}, $StartTimeZone);
         $Event{_recurrenceId} = $Date->iso8601();
       }
+      # extract the method if present
+      $Event{_method} = $method if $method;
       push @Events, \%Event;
     }
   }
