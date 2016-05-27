@@ -1,5 +1,8 @@
 Revision history for Net-CalDAVTalk
 
+0.06    Fri May 27 13:58 2016
+  - don't bail on incomplete ACL information
+
 0.05    Mon May  2 11:27 2016
   - add UpdateAddressSet API
 

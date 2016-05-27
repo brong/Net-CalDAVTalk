@@ -306,11 +306,11 @@ Net::CalDAVTalk - Module to talk CalDAV and give a JSON interface to the data
 
 =head1 VERSION
 
-Version 0.05
+Version 0.06
 
 =cut
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 
 =head1 SYNOPSIS
@@ -600,6 +600,9 @@ sub GetCalendars {
       $ace = [] unless ($ace and ref($ace) eq 'ARRAY');
       foreach my $Acl (@$ace) {
         next if $Acl->{"{$NS_D}protected"};  # ignore admin ACLs
+        next unless $Acl->{"{$NS_D}grant"};
+        next unless $Acl->{"{$NS_D}grant"}{"{$NS_D}privilege"};
+        next unless ref($Acl->{"{$NS_D}grant"}{"{$NS_D}privilege"}) eq 'ARRAY';
         # XXX - freeBusyPublic here?  Or should we do it via the web server?
         my $user = uri_unescape($Acl->{"{$NS_D}principal"}{"{$NS_D}href"}{content} // '');
         next unless $user =~ m{^/dav/principals/user/([^/]+)};
