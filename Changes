@@ -1,5 +1,8 @@
 Revision history for Net-CalDAVTalk
 
+0.07    Tue Jun 28 11:48 2016
+  - uploaded bogus path, so just fix it with a new version
+
 0.06    Fri May 27 13:58 2016
   - don't bail on incomplete ACL information
 
