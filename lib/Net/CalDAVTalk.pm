@@ -67,7 +67,7 @@ BEGIN {
   %DaysByIndex           = reverse %DaysByName;
   $DefaultCalendarColour = '#0252D4';
   $DefaultDisplayName    = 'Untitled Calendar';
-  @Frequencies           = qw{yearly monthly weekly daily hourly secondly};
+  @Frequencies           = qw{yearly monthly weekly daily hourly minutely secondly};
 
   @EventProperties = qw{
     uid
@@ -306,11 +306,11 @@ Net::CalDAVTalk - Module to talk CalDAV and give a JSON interface to the data
 
 =head1 VERSION
 
-Version 0.07
+Version 0.08
 
 =cut
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 
 =head1 SYNOPSIS
@@ -1393,11 +1393,8 @@ sub _makeDateObj {
   return ($Date, 1) unless $HasTime;
 
   # Do the timezone manipulation as required
-  $Date->set_time_zone($Self->tz($TZStr)) if ($TZStr);
-  if ($TargetTz) {
-    # XXX - skip if it's unchanged or already floating
-    $Date->set_time_zone($Self->tz($TargetTz));
-  }
+  $Date->set_time_zone($Self->tz($TZStr)) if $TZStr;
+  $Date->set_time_zone($Self->tz($TargetTz)) if $TargetTz;
 
   return ($Date, 0);
 }
@@ -1848,42 +1845,60 @@ sub _getEventsFromVCalendar {
 
       # }}}
 
-      my %Event = (
-        uid             => $uid,
-        state           => '',
-        sequence        => ($Properties{sequence}{value} || '0'),
-        summary         => ($Properties{summary}{value} || ''),
-        description     => join("\n", @description),
-        location        => ($Properties{location}{value} || ''),
-        showAsFree      => ($ShowAsFree ? $JSON::true : $JSON::false),
-        isAllDay        => ($IsAllDay ? $JSON::true : $JSON::false),
-        start           => (ref($Start) ? $Start->iso8601() : $JSON::null),
-        end             => (ref($End) ? $End->iso8601() : $JSON::null),
-        startTimeZone   => ($IsAllDay ? $JSON::null : $StartTimeZone),
-        endTimeZone     => ($IsAllDay ? $JSON::null : $EndTimeZone),
-        recurrence      => (%Recurrence ? \%Recurrence : $JSON::null),
-        exceptions      => (%Exceptions ? \%Exceptions : $JSON::null),
-        inclusions      => (@Inclusions ? \@Inclusions : $JSON::null),
-        organizer       => $Organizer,
-        attendees       => (@Attendees ? \@Attendees : $JSON::null),
-        alerts          => (@Alerts ? \@Alerts : $JSON::null),
-        attachments     => (@Attachments ? \@Attachments : $JSON::null),
-      );
-      if ($Properties{dtstamp}{value}) {
-        # UTC item
-        my $Date = eval { $Self->_getDateObj($Calendar, $Properties{dtstamp}, 'UTC') };
-        $Event{dtstamp} = $Date->iso8601() if $Date;
-      }
+      # ============= Metadata
+      my %Event = (uid => $uid);
+      # no support for relatedTo yet
+      # no support for prodId at this level
       if ($Properties{created}{value}) {
         # UTC item
         my $Date = eval { $Self->_getDateObj($Calendar, $Properties{created}, 'UTC') };
         $Event{created} = $Date->iso8601() if $Date;
       }
+      if ($Properties{dtstamp}{value}) {
+        # UTC item
+        my $Date = eval { $Self->_getDateObj($Calendar, $Properties{dtstamp}, 'UTC') };
+        $Event{updated} = $Date->iso8601() if $Date;
+      }
+      $Event{sequence} = $Properties{sequence}{value} || '0';
+      $Event{method} = $method if $method;
+
+      # ============= What
+      $Event{title} = $Properties{summary}{value} || '';
+      $Event{description} = join("\n", @description);
+      # htmlDescription is not supported
+      # links is not supported yet
+      $Event{attachments} = \@Attachments if @Attachments;
+      # language is not supported
+      # translations is not supported
+
+      # ============= Where
+      if ($Properties{location}{value}) {
+        $Event{locations} = [ { name => $Properties{location}{value} } ];
+        location        => ($Properties{location}{value} || ''),
+      }
+
+      # ============= When
+      $Event{isAllDay} = $IsAllDay ? $JSON::true : $JSON::false;
+      $Event{start} = $Start->iso8601() if ref($Start);
+      $Event{timeZone} = $StartTimeZone if not $IsAllDay;
+      $Event{duration} = $Self->_make_duration($Start, $End, $isAllDay);
+
+      $Event{recurrenceRule} = \%Recurrence if %Recurrence;
+      $Event{recurrenceOverrides} = \%Overrides if %Overrides;
+
+      # ============= Who
+      $Event{replyTo} = $Organizer->{
+
+
       if ($Properties{lastmodified}{value}) {
         # UTC item
         my $Date = eval { $Self->_getDateObj($Calendar, $Properties{lastmodified}, 'UTC') };
         $Event{lastModified} = $Date->iso8601();
       }
+      ( XXX
+        alerts          => (@Alerts ? \@Alerts : $JSON::null),
+        attachments     => (@Attachments ? \@Attachments : $JSON::null),
+      );
       if ($Properties{'recurrence-id'}{value}) {
         # in our system it's always in the timezone of the event, but iCloud
         # returns it in UTC despite the event having a timezone.  Super weird.
@@ -1891,8 +1906,6 @@ sub _getEventsFromVCalendar {
         my $Date = $Self->_getDateObj($Calendar, $Properties{'recurrence-id'}, $StartTimeZone);
         $Event{_recurrenceId} = $Date->iso8601();
       }
-      # extract the method if present
-      $Event{_method} = $method if $method;
       push @Events, \%Event;
     }
   }
