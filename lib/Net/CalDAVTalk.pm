@@ -676,7 +676,7 @@ sub NewCalendar {
 
   # default values
   $Args->{id} //= $Self->genuuid();
-  $Args->{name} //= '';
+  $Args->{name} //= $DefaultDisplayName;
 
   my $calendarId = $Args->{id};
 
@@ -1449,6 +1449,41 @@ sub _saneuid {
   return 1;
 }
 
+sub _makeParticipant {
+  my ($Self, $Particpants, $VAttendee, $role) = @_;
+
+  my $id = $VAttendee->{value};
+  return unless $id;
+  $id =~ s/^mailto://i;
+  return if $id eq '';
+
+  $Participants->{$id} ||= {};
+
+  # XXX - if present on one but not the other, take the "best" version
+  $Participants->{$id}{name} = $VAttendee->{params}{"cn"}[0] // "";
+  $Participants->{$id}{email} = $id;
+  $Participants->{$id}{kind} = lc($VAttendee->{params}{"cutype"}[0] // "unknown");
+  push @{$Participants->{$id}{roles}}, $role;
+  # we don't support locationId yet
+  if ($VAttendee->{params}{"partstat"}) {
+    $Participants->{$id}{scheduleStatus} = lc($VAttendee->{params}{"partstat"}[0] // "needs-action");
+  }
+  if ($VAttendee->{params}{"role"}) {
+    $Participants->{$id}{schedulePriority} = lc($VAttendee->{params}{"role"}[0] // "required");
+  }
+  if ($VAttendee->{params}{"rsvp"}) {
+    $Participants->{$id}{scheduleRSVP} = lc($VAttendee->{params}{"rsvp"}[0] // "") eq 'yes' ? $JSON::true : $JSON::false;
+  }
+  if (exists $VAttendee->{params}{"x-dtstamp"}) {
+    $Participants->{$id}{"scheduleUpdated"} = $VAttendee->{params}{"x-dtstamp"}[0]  // "";
+  }
+  # memberOf is not supported
+
+  if (exists $VAttendee->{params}{"x-sequence"}) {
+    $Participants->{$id}{"x-sequence"} = $VAttendee->{params}{"x-sequence"}[0] // "";
+  }
+}
+
 sub _getEventsFromVCalendar {
   my ($Self, $VCalendar) = @_;
 
@@ -1774,41 +1809,12 @@ sub _getEventsFromVCalendar {
 
       # parse attendees {{{
 
-      my @Attendees;
-      for my $VAttendee (@{$VEvent->{properties}{attendee} || []}) {
-        next unless $VAttendee->{value};
-        $VAttendee->{value} =~ s/^mailto://i;
-
-        my %Attendee;
-        $Attendee{"name"}       = $VAttendee->{params}{"cn"}[0]         // "";
-        $Attendee{"email"}      = $VAttendee->{value}                   // "";
-
-        if (exists $VAttendee->{params}{"x-sequence"}) {
-          $Attendee{"x-sequence"} = $VAttendee->{params}{"x-sequence"}[0] // "";
-        }
-
-        if (exists $VAttendee->{params}{"x-dtstamp"}) {
-          $Attendee{"x-dtstamp"} = $VAttendee->{params}{"x-dtstamp"}[0]  // "";
-        }
-
-        $Attendee{rsvp} = {
-          accepted  => "yes",
-          declined  => "no",
-          tentative => "maybe",
-        }->{lc($VAttendee->{params}{partstat}[0] // "")} // "";
-
-        push @Attendees, \%Attendee;
-      }
-
-      my $Organizer;
+      my %Participants;
       for my $VOrganizer (@{$VEvent->{properties}{organizer} || []}) {
-        next unless $VOrganizer->{value};
-        $VOrganizer->{value} =~ s/^mailto://i;
-        my %Organizer = (
-          email => $VOrganizer->{value},
-        );
-        $Organizer{name} = $VOrganizer->{params}{cn}[0] // "";
-        $Organizer = \%Organizer;
+        $Self->_makeParticipant(\%Participants, $VOrganizer, 'owner');
+      }
+      for my $VAttendee (@{$VEvent->{properties}{attendee} || []}) {
+        $Self->_makeParticipant(\%Participants, $VAttendee, 'attendee');
       }
 
       # }}}
@@ -1820,9 +1826,9 @@ sub _getEventsFromVCalendar {
         next unless $Attach->{value};
         next unless grep { $Attach->{value} =~ m{^$_://} } qw{http https ftp};
 
-        my $url = $Attach->{value};
+        my $uri = $Attach->{value};
         my $filename = $Attach->{params}{filename}[0];
-        if (not defined $filename and $url =~ m{/([^/]+)$}) {
+        if (not defined $filename and $uri =~ m{/([^/]+)$}) {
           $filename = $1;
         }
         # XXX - mime guessing?
@@ -1836,7 +1842,7 @@ sub _getEventsFromVCalendar {
         my $size = $Attach->{params}{size}[0];
 
         push @Attachments, {
-          url => $url,
+          uri => $uri,
           name => $filename,
           $mime ? (type => $mime) : (),
           $size ? (size => $size) : (),
@@ -1886,8 +1892,21 @@ sub _getEventsFromVCalendar {
       $Event{recurrenceRule} = \%Recurrence if %Recurrence;
       $Event{recurrenceOverrides} = \%Overrides if %Overrides;
 
-      # ============= Who
-      $Event{replyTo} = $Organizer->{
+      # ============= Scheduling
+      if ($Properties{status}{value}) {
+        $Event{status} = lc($Properties{status}{value});
+      }
+      if ($Properties{transp}{value}) {
+        $Event{showAsFree} = lc($Properties{transp}{value}) eq 'transparent' ? $JSON::true : $JSON::false;
+      }
+      foreach my $email (sort keys %$Particpants) { # later wins
+        $Event{replyTo} = $email if grep { $_ eq 'owner' } @{$Participants->{$email}{roles}};
+      }
+      $Event{participants} = $Participants;
+
+      # ============= Alerts
+      # useDefaultAlerts is not supported
+      $Event{alerts} = $Alerts if @Alerts; # XXX _ should be map
 
 
       if ($Properties{lastmodified}{value}) {
@@ -1895,10 +1914,6 @@ sub _getEventsFromVCalendar {
         my $Date = eval { $Self->_getDateObj($Calendar, $Properties{lastmodified}, 'UTC') };
         $Event{lastModified} = $Date->iso8601();
       }
-      ( XXX
-        alerts          => (@Alerts ? \@Alerts : $JSON::null),
-        attachments     => (@Attachments ? \@Attachments : $JSON::null),
-      );
       if ($Properties{'recurrence-id'}{value}) {
         # in our system it's always in the timezone of the event, but iCloud
         # returns it in UTC despite the event having a timezone.  Super weird.
