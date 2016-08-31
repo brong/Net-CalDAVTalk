@@ -85,7 +85,7 @@ BEGIN {
     sequence
     created
     lastModified
-    dtstamp
+    updated
     summary
     description
     location
@@ -1445,12 +1445,12 @@ sub _getDateObjMulti {
 # Exclude DTSTAMP from auto uid generation
 sub _hexkey {
   my $VEvent = shift;
-  my $Dtstamp = delete $VEvent->{properties}->{dtstamp};
+  my $updated = delete $VEvent->{properties}->{updated};
   my $d = Data::Dumper->new([$VEvent]);
   $d->Indent(0);
   $d->Sortkeys(1);
   my $Key = sha1_hex($d->Dump());
-  $VEvent->{properties}->{dtstamp} = $Dtstamp if $Dtstamp;
+  $VEvent->{properties}->{updated} = $updated if defined $updated;
   return $Key;
 }
 
@@ -1515,6 +1515,7 @@ sub _make_duration {
   push @bits, ($w, 'W') if $w;
   push @bits, ($d, 'D') if $d;
   if (not $IsAllDay and ($H || $M || $S)) {
+    push @bits, 'T';
     push @bits, ($H, 'H') if $H;
     push @bits, ($M, 'M') if $M;
     push @bits, ($S, 'S') if $S;
@@ -2134,7 +2135,7 @@ sub _argsToVEvents {
   );
 
   if ($recurrenceId) {
-    $VEvent->add_property('recurrence-id' => $Self->_makeLTime($TimeZones, $recurrenceId, $Args->{startTimeZone}, $Args->{isAllDay}));
+    $VEvent->add_property('recurrence-id' => $Self->_makeLTime($TimeZones, $recurrenceId, $Args->{timeZone}, $Args->{isAllDay}));
   }
 
   # direct copy if properties exist
@@ -2145,36 +2146,26 @@ sub _argsToVEvents {
   }
 
   # dates in UTC - stored in UTC
-  $VEvent->add_property(dtstamp => $Self->_makeZTime($Args->{dtstamp}));
   $VEvent->add_property(created => $Self->_makeZTime($Args->{created})) if $Args->{created};
-  $VEvent->add_property('last-modified' => $Self->_makeZTime($Args->{lastModified})) if $Args->{lastModified};
+  $VEvent->add_property(dtstamp => $Self->_makeZTime($Args->{updated}));
 
-  # dates in UTC - stored in localtime
-  my $StartTimeZone = $Args->{startTimeZone};
-  my $EndTimeZone   = $Args->{endTimeZone};
-
-  # if one is set, make sure they are both set
-  $StartTimeZone ||= $EndTimeZone;
-  $EndTimeZone   ||= $StartTimeZone;
-
-  if ($Args->{start}) {
-
-    $VEvent->add_property(dtstart => $Self->_makeVTime($TimeZones, $Args->{start}, $StartTimeZone, $Args->{isAllDay}));
-
-    if ($Args->{end}) {
-      $VEvent->add_property(dtend => $Self->_makeVTime($TimeZones, $Args->{end}, $EndTimeZone, $Args->{isAllDay}));
-
-      if ($Args->{start} gt $Args->{end}) {
-        confess "Start date is later than end date ($Args->{start}, $Args->{end})";
-      }
+  # dates in localtime - zones based on location
+  my $StartTimeZone = $Args->{timeZone};
+  my $EndTimeZone   = $Args->{timeZone};
+  if ($Args->{location}) {
+    foreach my $location (@{$Args->{location}}) {
+      next unless ($location->{rel} and $location->{rel} eq 'end');
+      $EndTimeZone = $location->{timeZone} if $location->{timeZone};
     }
   }
-  elsif (not $recurrenceId) {
-    confess "no start for event $Args->{id}";
+
+  $VEvent->add_property(dtstart => $Self->_makeVTime($TimeZones, $Args->{start}, $StartTimeZone, $Args->{isAllDay}));
+  if ($Args->{end}) {
+    $VEvent->add_property(dtend => $Self->_makeVTime($TimeZones, $Args->{end}, $EndTimeZone, $Args->{isAllDay}));
   }
 
-  if ($Args->{recurrence}) {
-    my %Recurrence = $Self->_makeRecurrence($Args->{recurrence}, $Args->{isAllDay}, $StartTimeZone);
+  if ($Args->{recurrenceRule}) {
+    my %Recurrence = $Self->_makeRecurrence($Args->{recurrenceRule}, $Args->{isAllDay}, $StartTimeZone);
 
     # RFC 2445 4.3.10 - FREQ is the first part of the RECUR value type.
     # RFC 5545 3.3.10 - FREQ should be first to ensure backward compatibility.
@@ -2185,23 +2176,21 @@ sub _argsToVEvents {
     $VEvent->add_property(rrule => $rule);
   }
 
-  if ($Args->{exceptions}) {
-    foreach my $recurrenceId (sort keys %{$Args->{exceptions}}) {
-      my $val = $Args->{exceptions}{$recurrenceId};
+  if ($Args->{recurrenceOverrides}) {
+    foreach my $recurrenceId (sort keys %{$Args->{recurrenceOverrides}}) {
+      my $val = $Args->{recurrenceOverrides}{$recurrenceId};
       if ($val) {
-        $Self->_maximise($Args, $val, $recurrenceId);
-        $val->{uid} = $Args->{uid}; # make sure this one is set
-        push @SubVEvents, $Self->_argsToVEvents($TimeZones, $val, $recurrenceId);
+        if (keys %$val) {
+          my $SubEvent = $Self->_maximise($Args, $val, $recurrenceId);
+          push @SubVEvents, $Self->_argsToVEvents($TimeZones, $SubEvent, $recurrenceId);
+        }
+        else {
+          $VEvent->add_property(rdate => $Self->_makeLTime($TimeZones, $recurrenceId, $StartTimeZone, $Args->{isAllDay}));
+        }
       }
       else {
         $VEvent->add_property(exdate => $Self->_makeLTime($TimeZones, $recurrenceId, $StartTimeZone, $Args->{isAllDay}));
       }
-    }
-  }
-
-  if ($Args->{inclusions}) {
-    foreach my $date (sort @{$Args->{inclusions}}) {
-      $VEvent->add_property(rdate => $Self->_makeLTime($TimeZones, $date, $StartTimeZone, $Args->{isAllDay}));
     }
   }
 
@@ -2645,53 +2634,42 @@ sub _minimise {
   my $Event = shift;
 
   confess unless ref($Event) eq 'HASH';
-  delete $Event->{dtstamp};
-  delete $Event->{created};
 
-  foreach my $Key (keys %$Event) {
-    delete $Event->{$Key} if $Key =~ m/^_/;
-  }
+  my $exceptions = delete $Event->{exceptions};
+  return $Event unless $exceptions;
 
-  foreach my $recurrenceId (sort keys %{$Event->{exceptions}}) {
-    my $Recurrence = $Event->{exceptions}{$recurrenceId};
-    next unless $Recurrence; # EXDATE
+  foreach my $recurrenceId (sort keys %{$exceptions}) {
+    my $Recurrence = $exceptions->{$recurrenceId};
 
-    delete $Recurrence->{sequence};
-    delete $Recurrence->{dtstamp};
-    delete $Recurrence->{created};
-
-    # check if time range is identical (keep timezone until after we've done this)
-    if ($Recurrence->{start}) {
-      my $tz = $Recurrence->{startTimeZone} // $Event->{startTimeZone};
-      my $uDate = _wireDate($recurrenceId, $Self->tz($tz));
-      $uDate->set_time_zone($UTC);
-      if ($uDate->iso8601() eq $Recurrence->{start}) {
-        delete $Recurrence->{start};
-
-        if ($Recurrence->{end}) {
-          die Data::Dumper::Dumper($Event) unless $Event->{start};
-          my $start = _wireDate($Event->{start}, $UTC);
-          my $end = _wireDate($Event->{end}, $UTC);
-          my $diff = $end->subtract_datetime($start);
-          $uDate->add_duration($diff);
-          if ($uDate->iso8601() eq $Recurrence->{end}) {
-            delete $Recurrence->{end};
-          }
-        }
-      }
-    }
-
-    # dupelim
+    my %override;
     foreach my $Key (keys %$Recurrence) {
-      delete $Recurrence->{$Key} if $Key =~ m/^_/;
-      delete $Recurrence->{$Key} if _safeeq($Event->{$Key}, $Recurrence->{$Key});
+      my $value = $Key eq 'start' ? $recurrenceId : $Event->{$Key};
+      next if _safeeq($Recurrence->{$Key}, $value);
+      # XXX - support deeper change calculation
+      $override{"/$Key"} = $Recurrence->{$Key};
     }
+    next unless keys %override;
 
-    # no point sending if it's entirely empty
-    delete $Event->{exceptions}{$recurrenceId} unless keys %$Recurrence;
+    $Event->{recurrenceOverrides}{$recurrenceId} = \%override;
   }
 
   return $Event;
+}
+
+sub _apply_patch {
+  my $path = shift;
+  my $hash = shift;
+  my $value = shift;
+
+  return unless $path =~ s{^/([^/]+)}{}; # who said regexes are unreadable?
+  return unless ref($hash) eq 'HASH';
+  my $key = $1;
+  if ($path) {
+    _apply_patch($path, $hash->{$key}, $value);
+  }
+  else {
+    $hash->{$key} = $value;
+  }
 }
 
 sub _maximise {
@@ -2702,40 +2680,17 @@ sub _maximise {
 
   #warn "MAXIMIZING EVENT INTO RECURRENCE: " . Dumper($Event, $Recurrence);
 
-  # time is a special case - if it's set on the event, it MUST be the
-  # actual recurrence's start and end time, not the original start and
-  # end time.  We wind up doing date maths.  Yay.
-  unless (exists $Recurrence->{start}) {
-    my $tz = $Recurrence->{startTimeZone} // $Event->{startTimeZone};
-    my $uDate = _wireDate($recurrenceId, $Self->tz($tz));
-    $uDate->set_time_zone($UTC);
-    $Recurrence->{start} = $uDate->iso8601();
+  my $new = _deepcopy($Event);
+  $new->{start} = $recurrenceId;
+  delete $new->{recurrenceRule};
+  delete $new->{recurrenceOverrides};
+
+  foreach my $path (sort keys %$Recurrence) {
+    my $value = $Recurrence->{$path};
+    _apply_patch($path, $new, $value);
   }
 
-  unless (exists $Recurrence->{end}) {
-    my $start = _wireDate($Event->{start}, $UTC);
-    my $end = _wireDate($Event->{end}, $UTC);
-    # length of the parent event
-    my $diff = $end->subtract_datetime($start);
-    # add to the recurrence ID time to see when the event would have ended
-    my $tz = $Recurrence->{startTimeZone} // $Event->{startTimeZone};
-    my $uDate = _wireDate($recurrenceId, $Self->tz($tz));
-    $uDate->set_time_zone($UTC);
-    $uDate->add_duration($diff);
-    $Recurrence->{end} = $uDate->iso8601();
-  }
-
-  foreach my $key (sort keys %$Event) {
-    next if defined $Recurrence->{$key};
-
-    # these items can only ever exist on the parent
-    next if $key eq 'recurrence';
-    next if $key eq 'exceptions';
-    next if $key eq 'inclusions';
-
-    # otherwise copy the key from the main event into the recurrence
-    $Recurrence->{$key} = $Event->{$key}; # XXX - deepclone?
-  }
+  return $new;
 }
 
 sub _stripNonICal {
@@ -2760,6 +2715,14 @@ sub _safeeq {
   return 0 if (not ref ($a) or not ref($b));
   my $json = JSON::XS->new->canonical;
   return $json->encode($a) eq $json->encode($b);
+}
+
+sub _deepcopy {
+  my $data = shift;
+  my $json = JSON::XS->new->canonical;
+  my $enc = $json->encode([$data]);
+  my $copy = $json->decode($enc);
+  return $copy->[0];
 }
 
 
