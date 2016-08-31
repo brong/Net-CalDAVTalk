@@ -1484,6 +1484,34 @@ sub _makeParticipant {
   }
 }
 
+sub _make_duration {
+  my ($Self, $Start, $End, $isAllDay) = @_;
+  return unless DateTime->compare($Start, $End); # same time?  That's no duration
+
+  my $dtdur = $End->subtract_datetime($Start);
+
+  my ($w, $d, $H, $M, $S) = (
+    $dtdur->weeks,
+    $dtdur->days,
+    $dtdur->hours,
+    $dtdur->minutes,
+    $dtdur->seconds,
+  );
+
+  return unless ($w || $d || $H || $M || $S);
+
+  my @bits = ('P');
+  push @bits, ($w, 'W') if $w;
+  push @bits, ($d, 'D') if $d;
+  if (not $isAllDay and ($H || $M || $S)) {
+    push @bits, ($H, 'H') if $H;
+    push @bits, ($M, 'M') if $M;
+    push @bits, ($S, 'S') if $S;
+  }
+
+  return join ('', @bits);
+}
+
 sub _getEventsFromVCalendar {
   my ($Self, $VCalendar) = @_;
 
@@ -1539,30 +1567,22 @@ sub _getEventsFromVCalendar {
 
         if (defined $Properties{dtend}{value}) {
           if (defined $Properties{duration}{value}) {
-            confess "$uid: DTEND and DURATION cannot both be set";
+            warn "$uid: DTEND and DURATION cannot both be set";
           }
 
           ($End, $EndTimeZone) = $Self->_getDateObj($Calendar, $Properties{dtend});
-
-          if ($IsAllDay and $Start->iso8601() eq $End->iso8601()) {
-            # make zero-length event longer
-            $End->add(days => 1);
-          }
         }
         elsif (defined $Properties{duration}{value}) {
           my $Duration = DateTime::Format::ICal->parse_duration(uc $Properties{duration}{value});
           $End = $Start->clone()->add($Duration);
           $EndTimeZone = $StartTimeZone;
         }
-        elsif ($IsAllDay) {
-          $End = $Start->clone()->add(days => 1);
-        }
         else {
           $End         = $Start->clone();
           $EndTimeZone = $StartTimeZone;
         }
 
-        if ($Start->iso8601() gt $End->iso8601()) {
+        if (DateTime->compare($Start, $End) < 0) {
           # swap em!
           ($Start, $End) = ($End, $Start);
           ($StartTimeZone, $EndTimeZone) = ($EndTimeZone, $StartTimeZone);
@@ -1865,12 +1885,12 @@ sub _getEventsFromVCalendar {
         my $Date = eval { $Self->_getDateObj($Calendar, $Properties{dtstamp}, 'UTC') };
         $Event{updated} = $Date->iso8601() if $Date;
       }
-      $Event{sequence} = $Properties{sequence}{value} || '0';
+      $Event{sequence} = $Properties{sequence}{value} if $Properties{sequence}{value};
       $Event{method} = $method if $method;
 
       # ============= What
-      $Event{title} = $Properties{summary}{value} || '';
-      $Event{description} = join("\n", @description);
+      $Event{title} = $Properties{summary}{value} if $Properties{summary}{value};
+      $Event{description} = join("\n", @description) if @description;
       # htmlDescription is not supported
       # links is not supported yet
       $Event{attachments} = \@Attachments if @Attachments;
@@ -1878,16 +1898,20 @@ sub _getEventsFromVCalendar {
       # translations is not supported
 
       # ============= Where
+      # XXX - support more structured representations from VEVENTs
       if ($Properties{location}{value}) {
-        $Event{locations} = [ { name => $Properties{location}{value} } ];
-        location        => ($Properties{location}{value} || ''),
+        push @{$Event{locations}}, [ { name => $Properties{location}{value} } ];
+      }
+      if ($StartTimeZone ne $EndTimeZone) {
+        push @{$Event{locations}}, [ { rel => 'end', timeZone => $EndTimeZone } ];
       }
 
       # ============= When
       $Event{isAllDay} = $IsAllDay ? $JSON::true : $JSON::false;
       $Event{start} = $Start->iso8601() if ref($Start);
       $Event{timeZone} = $StartTimeZone if not $IsAllDay;
-      $Event{duration} = $Self->_make_duration($Start, $End, $isAllDay);
+      my $duration = $Self->_make_duration($Start, $End, $isAllDay);
+      $Event{duration} = $duration if $duration;
 
       $Event{recurrenceRule} = \%Recurrence if %Recurrence;
       $Event{recurrenceOverrides} = \%Overrides if %Overrides;
