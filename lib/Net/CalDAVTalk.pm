@@ -44,6 +44,7 @@ my $BoT = '1970-01-01T00:00:00';
 my $EoT = '2038-01-19T00:00:00';
 
 my (
+  %WeekDayNames,
   %DaysByName,
   %DaysByIndex,
   %ColourNames,
@@ -54,6 +55,16 @@ my (
 );
 
 BEGIN {
+  %WeekDayNames = (
+    su => 'sunday',
+    mo => 'monday',
+    tu => 'tuesday',
+    we => 'wednesday',
+    th => 'thursday',
+    fr => 'friday',
+    sa => 'saturday',
+  );
+
   %DaysByName = (
     su => 0,
     mo => 1,
@@ -1341,7 +1352,7 @@ sub _BYDAY2byDay {
     confess 'Recurrence BYDAY-weekday not specified';
   }
 
-  unless (exists $DaysByName{$Day}) {
+  unless ($WeekDayNames{$Day}) {
     confess 'Invalid recurrence BYDAY-weekday';
   }
 
@@ -1351,7 +1362,10 @@ sub _BYDAY2byDay {
     }
   }
 
-  return int($DaysByName{$Day} + ($Count ? (7 * $Count) : 0));
+  return {
+    day => $WeekDayNames{$Day},
+    $Count ? (nthOfPeriod => int($Count)) : (),
+  };
 }
 
 sub _byDay2BYDAY {
@@ -1450,7 +1464,7 @@ sub _saneuid {
 }
 
 sub _makeParticipant {
-  my ($Self, $Particpants, $VAttendee, $role) = @_;
+  my ($Self, $Participants, $VAttendee, $role) = @_;
 
   my $id = $VAttendee->{value};
   return unless $id;
@@ -1485,10 +1499,7 @@ sub _makeParticipant {
 }
 
 sub _make_duration {
-  my ($Self, $Start, $End, $isAllDay) = @_;
-  return unless DateTime->compare($Start, $End); # same time?  That's no duration
-
-  my $dtdur = $End->subtract_datetime($Start);
+  my ($Self, $dtdur, $IsAllDay) = @_;
 
   my ($w, $d, $H, $M, $S) = (
     $dtdur->weeks,
@@ -1503,7 +1514,7 @@ sub _make_duration {
   my @bits = ('P');
   push @bits, ($w, 'W') if $w;
   push @bits, ($d, 'D') if $d;
-  if (not $isAllDay and ($H || $M || $S)) {
+  if (not $IsAllDay and ($H || $M || $S)) {
     push @bits, ($H, 'H') if $H;
     push @bits, ($M, 'M') if $M;
     push @bits, ($S, 'S') if $S;
@@ -1645,15 +1656,20 @@ sub _getEventsFromVCalendar {
           }
         }
 
+        if (exists $RRULE{rscale}) {
+          $Recurrence{rscale} = lc $RRULE{rscale};
+          $Recurrence{skip} = lc $RRULE{skip} if $RRULE{skip};
+        }
+
         if (exists $RRULE{wkst}) {
           my $wkst = lc $RRULE{wkst};
-          unless (defined $DaysByName{$wkst}) {
+          unless ($WeekDayNames{$wkst}) {
             confess "$uid: Invalid recurrence WKST ($RRULE{wkst})";
           }
 
           # default is Monday, so don't set a key for it
           if ($wkst ne 'mo') {
-            $Recurrence{firstDayOfWeek} = int $DaysByName{$wkst};
+            $Recurrence{firstDayOfWeek} = $WeekDayNames{$wkst};
           }
         }
 
@@ -1664,20 +1680,16 @@ sub _getEventsFromVCalendar {
             push @byDays, _BYDAY2byDay(lc $BYDAY);
           }
 
-          $Recurrence{byDay} = [sort { $a <=> $b } @byDays];
+          $Recurrence{byDay} = \@byDays if @byDays;
         }
 
         if (exists $RRULE{bymonth}) {
           foreach my $BYMONTH (split ',', $RRULE{bymonth}) {
-            unless ($BYMONTH =~ /^\d+$/) {
+            unless ($BYMONTH =~ /^\d+L?$/) {
               confess "$uid: Invalid recurrence BYMONTH ($BYMONTH, $RRULE{bymonth})";
             }
 
-            unless (($BYMONTH >= 1) and ($BYMONTH <= 12)) {
-              confess "$uid: Recurrence BYMONTH is out of range ($BYMONTH, $RRULE{bymonth})"; 
-            }
-
-            push @{$Recurrence{byMonth}}, ($BYMONTH - 1);
+            push @{$Recurrence{byMonth}}, "$BYMONTH";
           }
         }
 
@@ -1729,30 +1741,27 @@ sub _getEventsFromVCalendar {
         # }}}
       }
 
-      my %Exceptions;
+      my %Overrides;
       if (exists $VEvent->{properties}{exdate}) {
         foreach my $Item (@{$VEvent->{properties}{exdate}}) {
           foreach my $Date ($Self->_getDateObjMulti($Calendar, $Item, $StartTimeZone)) {
-            $Exceptions{$Date->iso8601()} = $JSON::null;
+            $Overrides{$Date->iso8601()} = $JSON::null;
           }
         }
       }
 
-      my @Inclusions;
       if ($VEvent->{properties}{rdate}) {
         # rdate      = "RDATE" rdtparam ":" rdtval *("," rdtval) CRLF
-        my %Inclusions;
         foreach my $Item (@{$VEvent->{properties}{rdate}}) {
           foreach my $Date ($Self->_getDateObjMulti($Calendar, $Item, $StartTimeZone)) {
-            $Inclusions{$Date->iso8601()} = $JSON::null;
+            $Overrides{$Date->iso8601()} = [];
           }
         }
-        @Inclusions = sort keys %Inclusions;
       }
 
       # parse alarms {{{
 
-      my @Alerts;
+      my %Alerts;
       foreach my $VAlarm (@{$VEvent->{objects} || []}) {
         next unless lc $VAlarm->{type} eq 'valarm';
 
@@ -1760,19 +1769,21 @@ sub _getEventsFromVCalendar {
           = map { $_ => $VAlarm->{properties}{$_}[0] }
               keys %{$VAlarm->{properties}};
 
+        my $alarmuid = $AlarmProperties{uid}{value} || hexkey($VAlarm) . '-alarmauto';
+
         my %Alert;
 
         my $Action = lc $AlarmProperties{action}{value};
         next unless $Action;
 
         if ($Action eq 'display') {
-          $Alert{type} = 'alert';
+          $Alert{type} = 'display';
         }
         elsif ($Action eq 'email') {
           $Alert{type} = 'email';
 
-          $Alert{recipients} = [
-            map { my ($x) = $_->{value} =~ m/^(?:mailto:)?(.*)/i; $x }
+          $Alert{to} = [
+            map { my ($x) = $_->{value} =~ m/^(?:mailto:)?(.*)/i; { email => $x } }
             @{$VAlarm->{properties}{attendee} // []}
           ];
         }
@@ -1799,30 +1810,21 @@ sub _getEventsFromVCalendar {
           ? 'end'
           : 'start';
 
-        my $AlertDate;
+        $Alert{relativeTo} = $Related;
+
+        my $Duration;
         if ($Trigger =~ m/^[+-]?P/i) {
-          my $Duration = eval { DateTime::Format::ICal->parse_duration(uc $Trigger) }
+          $Duration = eval { DateTime::Format::ICal->parse_duration(uc $Trigger) }
             || next;
 
-          # Can't get seconds on all durations, so calculate real date,
-          #  and then delta_ms against it
-          my $RelDate = $Related eq 'start' ? $Start : $End;
-          next unless ref $RelDate;
-
-          $AlertDate = $RelDate->clone()->add($Duration);
         } else {
-          $AlertDate = $Self->_getDateObj($Calendar, $AlarmProperties{trigger}, $StartTimeZone);
+          my $AlertDate = $Self->_getDateObj($Calendar, $AlarmProperties{trigger}, $StartTimeZone);
+          $Duration = $AlertDate->subtract_datetime($Related eq 'end' ? $End : $Start);
         }
 
-        next unless ref $Start;
-        $Alert{minutesBefore} = $AlertDate->delta_ms($Start)->in_units('minutes');
+        $Alert{offset} = $Self->_make_duration($Duration);
 
-        if ($Start < $AlertDate) {
-          # RFC and API are reverse signed
-          $Alert{minutesBefore} *= -1;
-        }
-
-        push @Alerts, \%Alert;
+        $Alerts{$alarmuid} = \%Alert;
       }
 
       # }}}
@@ -1910,7 +1912,7 @@ sub _getEventsFromVCalendar {
       $Event{isAllDay} = $IsAllDay ? $JSON::true : $JSON::false;
       $Event{start} = $Start->iso8601() if ref($Start);
       $Event{timeZone} = $StartTimeZone if not $IsAllDay;
-      my $duration = $Self->_make_duration($Start, $End, $isAllDay);
+      my $duration = $Self->_make_duration($End->subtract_datetime($Start), $IsAllDay);
       $Event{duration} = $duration if $duration;
 
       $Event{recurrenceRule} = \%Recurrence if %Recurrence;
@@ -1918,20 +1920,19 @@ sub _getEventsFromVCalendar {
 
       # ============= Scheduling
       if ($Properties{status}{value}) {
-        $Event{status} = lc($Properties{status}{value});
+        $Event{status} = lc($Properties{status}{value}) if lc($Properties{status}{value}) ne 'confirmed';
       }
       if ($Properties{transp}{value}) {
-        $Event{showAsFree} = lc($Properties{transp}{value}) eq 'transparent' ? $JSON::true : $JSON::false;
+        $Event{showAsFree} = $JSON::true if lc($Properties{transp}{value}) eq 'transparent';
       }
-      foreach my $email (sort keys %$Particpants) { # later wins
-        $Event{replyTo} = $email if grep { $_ eq 'owner' } @{$Participants->{$email}{roles}};
+      foreach my $email (sort keys %Participants) { # later wins
+        $Event{replyTo} = $email if grep { $_ eq 'owner' } @{$Participants{$email}{roles}};
       }
-      $Event{participants} = $Participants;
+      $Event{participants} = \%Participants if %Participants;
 
       # ============= Alerts
       # useDefaultAlerts is not supported
-      $Event{alerts} = $Alerts if @Alerts; # XXX _ should be map
-
+      $Event{alerts} = \%Alerts if %Alerts;
 
       if ($Properties{lastmodified}{value}) {
         # UTC item
@@ -2094,11 +2095,11 @@ sub _makeZTime {
 
 sub _makeLTime {
   my $Self = shift;
-  my ($TimeZones, $ltime, $tz, $isAllDay) = @_;
+  my ($TimeZones, $ltime, $tz, $IsAllDay) = @_;
 
   my $date = _wireDate($ltime, $Self->tz($tz));
 
-  return [$date->strftime('%Y%m%d'), { VALUE => 'DATE' }] if $isAllDay;
+  return [$date->strftime('%Y%m%d'), { VALUE => 'DATE' }] if $IsAllDay;
 
   unless ($tz) {
     # floating
