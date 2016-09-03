@@ -1026,12 +1026,11 @@ sub GetFreeBusy {
         ($EndTime) = $Self->_makeDateObj($End, 'UTC', 'UTC');
       }
       my $NewEvent = {
-        startTimeZone => 'Etc/UTC',
-        endTimeZone => 'Etc/UTC',
+        timeZone => 'Etc/UTC',
         start => $StartTime->iso8601(),
-        end => $EndTime->iso8601(),
-        summary => ($Args{name} // ''),
-        isAllDay => ($IsAllDay ? 1 : 0), 
+        duration => $Self->_make_duration($End->subtract_datetime($Start)),
+        title => ($Args{name} // ''),
+        isAllDay => ($IsAllDay ? $JSON::true : $JSON::false),
       };
 
       # Generate a uid that should remain the same for this freebusy entry
