@@ -2201,7 +2201,9 @@ sub _argsToVEvents {
   }
 
   if ($Args->{alerts}) {
-    for my $Alert (@{$Args->{alerts}}) {
+    for my $id (sort keys %{$Args->{alerts}}) {
+      my $Alert = $Args->{alerts}{$id};
+
       my $Type          = $Alert->{type} // '';
       my $Recipients    = $Alert->{recipients} // [];
       my $Uri           = $Alert->{uri} // '';
@@ -2211,7 +2213,7 @@ sub _argsToVEvents {
 
       my $VAlarm;
 
-      if ($Type eq 'alert') {
+      if ($Type eq 'display') {
         $VAlarm = Data::ICal::Entry::Alarm::Display->new();
         $VAlarm->add_properties(
           description => (($Sign eq '-')
