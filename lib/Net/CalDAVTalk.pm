@@ -1593,7 +1593,7 @@ sub _getEventsFromVCalendar {
           $EndTimeZone = $StartTimeZone;
         }
 
-        if (DateTime->compare($Start, $End) < 0) {
+        if (DateTime->compare($Start, $End) > 0) {
           # swap em!
           ($Start, $End) = ($End, $Start);
           ($StartTimeZone, $EndTimeZone) = ($EndTimeZone, $StartTimeZone);
