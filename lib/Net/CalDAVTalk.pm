@@ -1811,8 +1811,6 @@ sub _getEventsFromVCalendar {
           ? 'end'
           : 'start';
 
-        $Alert{relativeTo} = $Related;
-
         my $Duration;
         if ($Trigger =~ m/^[+-]?P/i) {
           $Duration = eval { DateTime::Format::ICal->parse_duration(uc $Trigger) }
@@ -1822,6 +1820,14 @@ sub _getEventsFromVCalendar {
           my $AlertDate = $Self->_getDateObj($Calendar, $AlarmProperties{trigger}, $StartTimeZone);
           $Duration = $AlertDate->subtract_datetime($Related eq 'end' ? $End : $Start);
         }
+        if ($Duration->is_negative()) {
+          $Duration = $Duration->inverse();
+          $Alert{relativeTo} = "before-$Related";
+        }
+        else {
+          $Alert{relativeTo} = "after-$Related";
+        }
+
 
         $Alert{offset} = $Self->_make_duration($Duration);
 
