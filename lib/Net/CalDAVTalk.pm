@@ -641,7 +641,7 @@ sub GetCalendars {
         name       => ($Propstat->{"{$NS_D}prop"}{"{$NS_D}displayname"}{content} || $DefaultDisplayName),
         href       => $href,
         color      => _fixColour($Propstat->{"{$NS_D}prop"}{"{$NS_A}calendar-color"}{content}),
-        timezone   => $Propstat->{"{$NS_D}prop"}{"{$NS_C}calendar-timezone"}{content},
+        timeZone   => $Propstat->{"{$NS_D}prop"}{"{$NS_C}calendar-timezone"}{content},
         isVisible  => $isVisible,
         precedence => int($Propstat->{"{$NS_D}prop"}{"{$NS_A}calendar-order"}{content} || 1),
         syncToken  => ($Propstat->{"{$NS_D}prop"}{"{$NS_D}sync-token"}{content} || ''),
@@ -703,8 +703,8 @@ sub NewCalendar {
     push @Properties, x('A:calendar-color', _fixColour($Args->{color}));
   }
 
-  if (exists $Args->{timezone}) {
-    push @Properties, x('C:calendar-timezone', $Args->{timezone});
+  if (exists $Args->{timeZone}) {
+    push @Properties, x('C:calendar-timezone', $Args->{timeZone});
   }
 
   if (exists $Args->{precedence}) {
@@ -759,8 +759,8 @@ sub UpdateCalendar {
     push @Params, x('A:calendar-color', _fixColour($Calendar{color}));
   }
 
-  if (exists $Args->{timezone}) {
-    push @Params, x('C:calendar-timezone', $Args->{timezone});
+  if (exists $Args->{timeZone}) {
+    push @Params, x('C:calendar-timezone', $Args->{timeZone});
   }
 
   if (exists $Calendar{isVisible}) {
@@ -1028,9 +1028,10 @@ sub GetFreeBusy {
       my $NewEvent = {
         timeZone => 'Etc/UTC',
         start => $StartTime->iso8601(),
-        duration => $Self->_make_duration($End->subtract_datetime($Start)),
+        duration => $Self->_make_duration($EndTime->subtract_datetime($StartTime)),
         title => ($Args{name} // ''),
         isAllDay => ($IsAllDay ? $JSON::true : $JSON::false),
+        updated => $item->{updated}, # XXX - infoleak?
       };
 
       # Generate a uid that should remain the same for this freebusy entry
@@ -1041,6 +1042,7 @@ sub GetFreeBusy {
     }
   }
 
+  warn Dumper(\@result);
   return (\@result, \@errors);
 }
 
@@ -2006,7 +2008,7 @@ sub _getTimeZone {
 sub _wireDate {
   # format: YYYY-MM-DDTHH:MM:SS (no Z)
   my $isoDate = shift;
-  my $timezone = shift || $FLOATING;
+  my $timeZone = shift || $FLOATING;
   confess "Invalid value '$isoDate' was not ISO8601" unless $isoDate =~ m/^(\d{4,})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)$/i;
 
   my $Date = DateTime->_new(
@@ -2016,7 +2018,7 @@ sub _wireDate {
     hour => $4,
     minute => $5,
     second => $6,
-    time_zone => $timezone,
+    time_zone => $timeZone,
     locale => $LOCALE,
   ) or confess "Invalid value '$isoDate'";
 
@@ -2627,7 +2629,7 @@ sub GetICal {
     my $VCalendar = $Self->_argsToVCalendar($Events,
       method => 'PUBLISH',
       'x-wr-calname' => $Cal->{name},
-      'x-wr-timezone' => $Cal->{timezone},
+      'x-wr-timezone' => $Cal->{timeZone},
       'x-apple-calendar-color' => $Cal->{color},
       # XXX - do we want to add our sync-token here or something?
     );
