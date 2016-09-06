@@ -2139,6 +2139,7 @@ sub _argsToVEvents {
     uid      => $Args->{uid},
     sequence => ($Args->{sequence} || 0),
     transp   => ($Args->{showAsFree} ? 'TRANSPARENT' : 'OPAQUE'),
+    summary => $Args->{title},
   );
 
   if ($recurrenceId) {
@@ -2146,7 +2147,7 @@ sub _argsToVEvents {
   }
 
   # direct copy if properties exist
-  foreach my $Property (qw{summary description location}) {
+  foreach my $Property (qw{description location}) {
     my $Prop = $Args->{$Property} // '';
     next if $Prop eq '';
     $VEvent->add_property($Property => $Prop);
@@ -2260,38 +2261,28 @@ sub _argsToVEvents {
     }
   }
 
-  if ($Args->{attendees}) {
-    for my $Attendee (@{$Args->{attendees}}) {
-      my $Email = $Attendee->{email};
+  if ($Args->{participants}) {
+    foreach my $Address (sort keys %{$Args->{participants}}) {
+      my $Attendee = $Args->{participants}{$Address};
+      my $Email = $Attendee->{email} || $Address;
       my $Rsvp  = $Attendee->{rsvp};
 
       my %AttendeeProps;
       $AttendeeProps{"CN"}         = $Attendee->{"name"}       if defined $Attendee->{"name"};
-      $AttendeeProps{"RSVP"}       = "TRUE";
+      if (grep { $_ eq 'owner' } @{$Attendee->{"roles"} || []}) {
+        $VEvent->add_property(organizer => [ "MAILTO:$Email", \%AttendeeProps ]);
+      }
+      $AttendeeProps{"RSVP"}       = uc $Attendee->{"scheduleRSVP"} if defined $Attendee->{"scheduleRSVP"};
       $AttendeeProps{"X-SEQUENCE"} = $Attendee->{"x-sequence"} if defined $Attendee->{"x-sequence"};
       $AttendeeProps{"X-DTSTAMP"}  = $Attendee->{"x-dtstamp"}  if defined $Attendee->{"x-dtstamp"};
       foreach my $prop (keys %AttendeeProps) {
         delete $AttendeeProps{$prop} if $AttendeeProps{$prop} eq '';
       }
 
-      $AttendeeProps{PARTSTAT} = {
-        yes   => "ACCEPTED",
-        no    => "DECLINED",
-        maybe => "TENTATIVE",
-      }->{$Rsvp} // "NEEDS-ACTION";
+      $AttendeeProps{PARTSTAT} = uc $Attendee->{"scheduleStatus"};
 
       $VEvent->add_property(attendee => [ "MAILTO:$Email", \%AttendeeProps ]);
     }
-  }
-
-  if ($Args->{organizer}) {
-    my $Email = $Args->{organizer}{email};
-    my $Name = $Args->{organizer}{name};
-
-    my %OrganizerProps;
-    $OrganizerProps{CN} = $Name if $Name;
-
-    $VEvent->add_property(organizer => [ "MAILTO:$Email", \%OrganizerProps ]);
   }
 
   if ($Args->{attachments}) {
