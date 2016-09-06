@@ -1575,34 +1575,31 @@ sub _getEventsFromVCalendar {
 
       my ($IsAllDay, $Start, $StartTimeZone, $End, $EndTimeZone) = ('') x 5;
 
-      if (defined $Properties{dtstart}{value}) {
-        ($Start, $StartTimeZone, $IsAllDay) = $Self->_getDateObj($Calendar, $Properties{dtstart});
+      confess "$uid: DTSTART not specified" unless defined $Properties{dtstart}{value};
 
-        if (defined $Properties{dtend}{value}) {
-          if (defined $Properties{duration}{value}) {
-            warn "$uid: DTEND and DURATION cannot both be set";
-          }
+      ($Start, $StartTimeZone, $IsAllDay) = $Self->_getDateObj($Calendar, $Properties{dtstart});
 
-          ($End, $EndTimeZone) = $Self->_getDateObj($Calendar, $Properties{dtend});
-        }
-        elsif (defined $Properties{duration}{value}) {
-          my $Duration = DateTime::Format::ICal->parse_duration(uc $Properties{duration}{value});
-          $End = $Start->clone()->add($Duration);
-          $EndTimeZone = $StartTimeZone;
-        }
-        else {
-          $End         = $Start->clone();
-          $EndTimeZone = $StartTimeZone;
+      if (defined $Properties{dtend}{value}) {
+        if (defined $Properties{duration}{value}) {
+          warn "$uid: DTEND and DURATION cannot both be set";
         }
 
-        if (DateTime->compare($Start, $End) > 0) {
-          # swap em!
-          ($Start, $End) = ($End, $Start);
-          ($StartTimeZone, $EndTimeZone) = ($EndTimeZone, $StartTimeZone);
-        }
+        ($End, $EndTimeZone) = $Self->_getDateObj($Calendar, $Properties{dtend});
       }
-      elsif (not defined $Properties{'recurrence-id'}{value}) {
-        confess "$uid: DTSTART not specified";
+      elsif (defined $Properties{duration}{value}) {
+        my $Duration = DateTime::Format::ICal->parse_duration(uc $Properties{duration}{value});
+        $End = $Start->clone()->add($Duration);
+        $EndTimeZone = $StartTimeZone;
+      }
+      else {
+        $End         = $Start->clone();
+        $EndTimeZone = $StartTimeZone;
+      }
+
+      if (DateTime->compare($Start, $End) > 0) {
+        # swap em!
+        ($Start, $End) = ($End, $Start);
+        ($StartTimeZone, $EndTimeZone) = ($EndTimeZone, $StartTimeZone);
       }
 
       if ($IsAllDay and $StartTimeZone) {
@@ -1771,7 +1768,7 @@ sub _getEventsFromVCalendar {
           = map { $_ => $VAlarm->{properties}{$_}[0] }
               keys %{$VAlarm->{properties}};
 
-        my $alarmuid = $AlarmProperties{uid}{value} || hexkey($VAlarm) . '-alarmauto';
+        my $alarmuid = $AlarmProperties{uid}{value} || _hexkey($VAlarm) . '-alarmauto';
 
         my %Alert;
 
@@ -1821,6 +1818,7 @@ sub _getEventsFromVCalendar {
           my $AlertDate = $Self->_getDateObj($Calendar, $AlarmProperties{trigger}, $StartTimeZone);
           $Duration = $AlertDate->subtract_datetime($Related eq 'end' ? $End : $Start);
         }
+
         if ($Duration->is_negative()) {
           $Duration = $Duration->inverse();
           $Alert{relativeTo} = "before-$Related";
@@ -1828,7 +1826,6 @@ sub _getEventsFromVCalendar {
         else {
           $Alert{relativeTo} = "after-$Related";
         }
-
 
         $Alert{offset} = $Self->_make_duration($Duration);
 
@@ -1912,7 +1909,7 @@ sub _getEventsFromVCalendar {
       if ($Properties{location}{value}) {
         push @{$Event{locations}}, [ { name => $Properties{location}{value} } ];
       }
-      if ($StartTimeZone ne $EndTimeZone) {
+      if (not $IsAllDay and $StartTimeZone ne $EndTimeZone) {
         push @{$Event{locations}}, [ { rel => 'end', timeZone => $EndTimeZone } ];
       }
 
