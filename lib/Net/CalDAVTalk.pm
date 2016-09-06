@@ -1892,6 +1892,7 @@ sub _getEventsFromVCalendar {
         my $Date = eval { $Self->_getDateObj($Calendar, $Properties{dtstamp}, 'UTC') };
         $Event{updated} = $Date->iso8601() if $Date;
       }
+      $Event{updated} ||= DateTime->now->iso8601();
       $Event{sequence} = $Properties{sequence}{value} if $Properties{sequence}{value};
       $Event{method} = $method if $method;
 
@@ -2152,7 +2153,7 @@ sub _argsToVEvents {
 
   # dates in UTC - stored in UTC
   $VEvent->add_property(created => $Self->_makeZTime($Args->{created})) if $Args->{created};
-  $VEvent->add_property(dtstamp => $Self->_makeZTime($Args->{updated}));
+  $VEvent->add_property(dtstamp => $Self->_makeZTime($Args->{updated} || DateTime->now->iso8601()));
 
   # dates in localtime - zones based on location
   my $StartTimeZone = $Args->{timeZone};
