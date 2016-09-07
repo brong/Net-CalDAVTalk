@@ -45,6 +45,7 @@ my $EoT = '2038-01-19T00:00:00';
 
 my (
   %WeekDayNames,
+  %WeekDayNamesReverse,
   %DaysByName,
   %DaysByIndex,
   %ColourNames,
@@ -64,6 +65,7 @@ BEGIN {
     fr => 'friday',
     sa => 'saturday',
   );
+  %WeekDayNamesReverse = reverse %WeekDayNames;
 
   %DaysByName = (
     su => 0,
@@ -1376,24 +1378,18 @@ sub _byDay2BYDAY {
     confess 'Invalid recurrence byDay';
   }
 
-  unless ($byDay =~ /^-?\d+$/) {
-    confess 'Recurrence byDay is not a number';
+  unless (ref $byDay eq 'HASH') {
+    confess 'Recurrence byDay is not an object';
   }
 
-  my $Day          = $byDay % 7;
-  my $SignedPrefix = ($byDay - $Day) / 7;
-
-  unless (($SignedPrefix >= -53) and ($SignedPrefix <= 53)) {
-    confess 'Recurrence byDay is out of range';
+  my $Day          = $WeekDayNamesReverse{$byDay->{day}};
+  unless ($Day) {
+    confess 'Recurrence byDay is not a known day';
   }
+  my $Prefix = '';
+  $Prefix = int($byDay->{nthOfPeriod}) if $byDay->{nthOfPeriod};
 
-  my $Prefix = ($SignedPrefix < 0 ? ($SignedPrefix * -1) : $SignedPrefix) % 54;
-
-  if ($SignedPrefix < 0) {
-    $Prefix *= -1;
-  }
-
-  return ($Prefix || '') . uc($DaysByIndex{$Day});
+  return $Prefix . uc($Day);
 }
 
 sub _makeDateObj {
