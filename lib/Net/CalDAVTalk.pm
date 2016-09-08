@@ -2061,9 +2061,16 @@ sub _vDate {
 
 sub _makeVTime {
   my $Self = shift;
-  my ($TimeZones, $utc, $tz, $IsAllDay) = @_;
+  my ($TimeZones, $wire, $tz, $IsAllDay) = @_;
 
-  my $date = _wireDate($utc, $UTC);
+  my $date = _wireDate($wire, $tz);
+
+  return _makeVTimeObj($TimeZones, $date, $tz, $IsAllDay);
+}
+
+sub _makeVTimeObj {
+  my $Self = shift;
+  my ($TimeZones, $date, $tz, $IsAllDay) = @_;
 
   # all day?
   if ($IsAllDay) {
@@ -2081,9 +2088,6 @@ sub _makeVTime {
   }
 
   my $zone = $Self->tz($tz);
-
-  eval {$date->set_time_zone($zone)}
-    or confess "Invalid start timezone ($tz)";
 
   $TimeZones->{$zone->name()} = 1;
 
@@ -2161,9 +2165,12 @@ sub _argsToVEvents {
     }
   }
 
-  $VEvent->add_property(dtstart => $Self->_makeVTime($TimeZones, $Args->{start}, $StartTimeZone, $Args->{isAllDay}));
-  if ($Args->{end}) {
-    $VEvent->add_property(dtend => $Self->_makeVTime($TimeZones, $Args->{end}, $EndTimeZone, $Args->{isAllDay}));
+  my $Start = _wireDate($Args->{start}, $StartTimeZone);
+  $VEvent->add_property(dtstart => $Self->_makeVTimeObj($TimeZones, $Start, $StartTimeZone, $Args->{isAllDay}));
+  if ($Args->{duration}) {
+    my $Duration = eval { DateTime::Format::ICal->parse_duration($Args->{duration}) };
+    my $End = $Start->clone()->add($Duration) if $Duration;
+    $VEvent->add_property(dtend => $Self->_makeVTimeObj($TimeZones, $End, $EndTimeZone, $Args->{isAllDay}));
   }
 
   if ($Args->{recurrenceRule}) {
