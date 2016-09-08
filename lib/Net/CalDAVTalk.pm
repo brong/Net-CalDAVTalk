@@ -2210,9 +2210,11 @@ sub _argsToVEvents {
       my $Type          = $Alert->{type} // '';
       my $Recipients    = $Alert->{recipients} // [];
       my $Uri           = $Alert->{uri} // '';
-      my $MinutesBefore = $Alert->{minutesBefore} // 15;
-      my $Sign          = ($MinutesBefore >= 0) ? '-' : '';
-      $MinutesBefore    = abs($MinutesBefore);
+      my $Offset        = $Alert->{offset};
+      my $Sign          = $Alert->{relativeTo} =~ m/before/ ? '-' : '';
+      my $Loc1          = $Alert->{relativeTo} =~ m/end/ ? "ends" : "starts";
+      my $Loc2          = $Alert->{relativeTo} =~ m/end/ ? "ended" : "started";
+      my $Minutes       = DateTime::Format::ICal->parse_duration(uc $Offset)->in_units('minutes');
 
       my $VAlarm;
 
@@ -2220,20 +2222,20 @@ sub _argsToVEvents {
         $VAlarm = Data::ICal::Entry::Alarm::Display->new();
         $VAlarm->add_properties(
           description => (($Sign eq '-')
-            ? "'$Args->{summary}' starts in $MinutesBefore minutes"
-            : "'$Args->{summary}' started $MinutesBefore minutes ago"),
+            ? "'$Args->{summary}' $Loc1 in $Minutes minutes"
+            : "'$Args->{summary}' $Loc2 $Minutes minutes ago"),
         );
       }
       elsif ($Type eq 'email' || $Type eq 'uri') {
         my ($Summary, $Description);
 
         if ($Sign eq '-') {
-          $Summary     = "Event alert: '$Args->{summary}' starts in $MinutesBefore minutes";
-          $Description = "Your event '$Args->{summary}' starts in $MinutesBefore minutes";
+          $Summary     = "Event alert: '$Args->{summary}' $Loc1 in $Minutes minutes";
+          $Description = "Your event '$Args->{summary}' $Loc1 in $Minutes minutes";
         }
         else {
-          $Summary     = "Event alert: '$Args->{summary}' started $MinutesBefore minutes ago";
-          $Description = "Your event '$Args->{summary}' started $MinutesBefore minutes ago";
+          $Summary     = "Event alert: '$Args->{summary}' $Loc2 $Minutes minutes ago";
+          $Description = "Your event '$Args->{summary}' $Loc2 $Minutes minutes ago";
         }
 
         $VAlarm = Data::ICal::Entry::Alarm::Email->new();
@@ -2257,7 +2259,8 @@ sub _argsToVEvents {
         confess "Unknown alarm type $Type";
       }
 
-      $VAlarm->add_property(trigger => "${Sign}PT".$MinutesBefore."M");
+      $VAlarm->add_property(trigger => "${Sign}$Offset");
+      $VAlarm->add_peoperty(related => 'end') if $Alarm->{relativeTo} =~ m/end/;
       $VEvent->add_entry($VAlarm);
     }
   }
