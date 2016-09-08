@@ -1889,7 +1889,7 @@ sub _getEventsFromVCalendar {
         $Event{updated} = $Date->iso8601() if $Date;
       }
       $Event{updated} ||= DateTime->now->iso8601();
-      $Event{sequence} = $Properties{sequence}{value} if $Properties{sequence}{value};
+      $Event{sequence} = int($Properties{sequence}{value}) if $Properties{sequence}{value};
       $Event{method} = $method if $method;
 
       # ============= What
