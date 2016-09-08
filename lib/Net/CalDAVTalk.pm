@@ -2222,20 +2222,20 @@ sub _argsToVEvents {
         $VAlarm = Data::ICal::Entry::Alarm::Display->new();
         $VAlarm->add_properties(
           description => (($Sign eq '-')
-            ? "'$Args->{summary}' $Loc1 in $Minutes minutes"
-            : "'$Args->{summary}' $Loc2 $Minutes minutes ago"),
+            ? "'$Args->{title}' $Loc1 in $Minutes minutes"
+            : "'$Args->{title}' $Loc2 $Minutes minutes ago"),
         );
       }
       elsif ($Type eq 'email' || $Type eq 'uri') {
         my ($Summary, $Description);
 
         if ($Sign eq '-') {
-          $Summary     = "Event alert: '$Args->{summary}' $Loc1 in $Minutes minutes";
-          $Description = "Your event '$Args->{summary}' $Loc1 in $Minutes minutes";
+          $Summary     = "Event alert: '$Args->{title}' $Loc1 in $Minutes minutes";
+          $Description = "Your event '$Args->{title}' $Loc1 in $Minutes minutes";
         }
         else {
-          $Summary     = "Event alert: '$Args->{summary}' $Loc2 $Minutes minutes ago";
-          $Description = "Your event '$Args->{summary}' $Loc2 $Minutes minutes ago";
+          $Summary     = "Event alert: '$Args->{title}' $Loc2 $Minutes minutes ago";
+          $Description = "Your event '$Args->{title}' $Loc2 $Minutes minutes ago";
         }
 
         $VAlarm = Data::ICal::Entry::Alarm::Email->new();
@@ -2260,7 +2260,7 @@ sub _argsToVEvents {
       }
 
       $VAlarm->add_property(trigger => "${Sign}$Offset");
-      $VAlarm->add_peoperty(related => 'end') if $Alarm->{relativeTo} =~ m/end/;
+      $VAlarm->add_property(related => 'end') if $Alert->{relativeTo} =~ m/end/;
       $VEvent->add_entry($VAlarm);
     }
   }
