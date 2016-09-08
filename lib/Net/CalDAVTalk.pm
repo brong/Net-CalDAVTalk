@@ -2283,7 +2283,7 @@ sub _argsToVEvents {
         delete $AttendeeProps{$prop} if $AttendeeProps{$prop} eq '';
       }
 
-      $AttendeeProps{PARTSTAT} = uc $Attendee->{"scheduleStatus"};
+      $AttendeeProps{PARTSTAT} = uc $Attendee->{"scheduleStatus"} if $Attendee->{"scheduleStatus"};
 
       $VEvent->add_property(attendee => [ "MAILTO:$Email", \%AttendeeProps ]);
     }
