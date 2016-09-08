@@ -2710,12 +2710,8 @@ sub _stripNonICal {
 
 sub _safeeq {
   my ($a, $b) = @_;
-  return 1 if (not defined $a and not defined $b);
-  return 0 if (not defined $a  or not defined $b);
-  return ($a eq $b) if (not ref ($a) and not ref($b));
-  return 0 if (not ref ($a) or not ref($b));
   my $json = JSON::XS->new->canonical;
-  return $json->encode($a) eq $json->encode($b);
+  return $json->encode([$a]) eq $json->encode([$b]);
 }
 
 sub _deepcopy {
