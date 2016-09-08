@@ -2065,7 +2065,7 @@ sub _makeVTime {
 
   my $date = _wireDate($wire, $tz);
 
-  return _makeVTimeObj($TimeZones, $date, $tz, $IsAllDay);
+  return $Self->_makeVTimeObj($TimeZones, $date, $tz, $IsAllDay);
 }
 
 sub _makeVTimeObj {
