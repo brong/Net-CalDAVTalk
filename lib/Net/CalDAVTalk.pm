@@ -2413,15 +2413,16 @@ sub _makeRecurrence {
     my @BYMONTHS;
 
     foreach my $byMonth (@{$Args->{byMonth}}) {
-      unless ($byMonth =~ /^\d+$/) {
-        confess "Recurrence byMonth is not a number ($byMonth)";
+      unless ($byMonth =~ /^(\d+)L?$/i) {
+        confess "Recurrence byMonth is not a number with optional L ($byMonth)";
+      }
+      my $monthNum = $1;
+      unless ($monthNum >= 1 and $monthNum <= 13) {
+        # not sure if 13 is OK
+        confess "Recurrence byMonth is too high ($monthNum)";
       }
 
-      unless (($byMonth >= 0) and ($byMonth <= 11)) {
-        confess "Recurrence byMonth is out of range ($byMonth)";
-      }
-
-      push @BYMONTHS, $byMonth + 1;
+      push @BYMONTHS, $byMonth;
     }
 
     $Recurrence{BYMONTH} = join ',', @BYMONTHS;
