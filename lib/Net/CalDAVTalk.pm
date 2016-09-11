@@ -1749,7 +1749,7 @@ sub _getEventsFromVCalendar {
         # rdate      = "RDATE" rdtparam ":" rdtval *("," rdtval) CRLF
         foreach my $Item (@{$VEvent->{properties}{rdate}}) {
           foreach my $Date ($Self->_getDateObjMulti($Calendar, $Item, $StartTimeZone)) {
-            $Overrides{$Date->iso8601()} = [];
+            $Overrides{$Date->iso8601()} = {};
           }
         }
       }
