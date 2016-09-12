@@ -1440,6 +1440,10 @@ sub _getDateObjMulti {
 
   my $TimeZone = $Self->_getTimeZone($Calendar, $VItem);
   foreach my $Value (split /,/, $VItem->{value}) {
+    # XXX - handle $V2 sanely
+    if (lc($VItem->{params}{value}[0] || '') eq 'period') {
+      ($Value, my $V2) = split /\//, $Value;
+    }
     my ($Date, $IsAllDay) = $Self->_makeDateObj($Value, $TimeZone, $TargetTz);
     push @Dates, $Date;
   }
