@@ -885,12 +885,17 @@ sub GetEvents {
 
   # }}}
 
+  my @CalProps;
+  if ($Args{ContentType}) {
+    push @CalProps, 'content-type' => $Args{ContentType};
+  }
+
   my $Response = $Self->Request(
     'REPORT',
     "$calendarId/",
     x($TopLevel, $Self->NS(),
       x('D:prop',
-        x('C:calendar-data'),
+        x('C:calendar-data', @CalProps),
         @Annotations,
       ),
       $Filter,
