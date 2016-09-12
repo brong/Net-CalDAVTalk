@@ -1906,7 +1906,7 @@ sub _getEventsFromVCalendar {
       if ($Properties{location}{value}) {
         push @{$Event{locations}}, [ { name => $Properties{location}{value} } ];
       }
-      if (not $IsAllDay and $StartTimeZone ne $EndTimeZone) {
+      if (not $IsAllDay and $StartTimeZone and $StartTimeZone ne $EndTimeZone) {
         push @{$Event{locations}}, [ { rel => 'end', timeZone => $EndTimeZone } ];
       }
 
