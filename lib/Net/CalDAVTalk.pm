@@ -2340,7 +2340,7 @@ sub _argsToVEvents {
     foreach my $uri (sort keys %{$Args->{links}}) {
       my $Attach = $Args->{links}{$uri};
       my $Url = $Attach->{href} || $uri;
-      if ($Attach->{rel} eq 'enclosure') {
+      if ($Attach->{rel} && $Attach->{rel} eq 'enclosure') {
         my $FileName = $Attach->{title};
         my $Mime = $Attach->{type};
         my $Size = $Attach->{size};
