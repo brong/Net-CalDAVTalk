@@ -2649,6 +2649,13 @@ sub _quotekey {
   return $key;
 }
 
+sub _unquotekey {
+  my $key = shift;
+  $key =~ s/\~1/\//gs;
+  $key =~ s/\~0/~/gs;
+  return $key;
+}
+
 sub _add_override {
   my ($override, $prefix, $New, $Old) = @_;
 
@@ -2712,8 +2719,9 @@ sub _apply_patch {
 
   return unless $path =~ s{^([^/]+)(/?)}{};
   return unless ref($hash) eq 'HASH';
-  my $key = $1;
+  my $qkey = $1;
   my $slash = $2;
+  my $key = _unquotekey($qkey);
   if ($slash) {
     _apply_patch($path, $hash->{$key}, $value);
   }
