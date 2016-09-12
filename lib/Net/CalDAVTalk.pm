@@ -2706,7 +2706,9 @@ sub _minimise {
     my $Recurrence = $exceptions->{$recurrenceId};
 
     my %override;
+    my %oldkeys = map { $_ => 1 } keys %$Event;
     foreach my $Key (sort keys %$Recurrence) {
+      delete $oldkeys{$Key};
       if ($Key eq 'start') {
         # special case, it's the recurrence-id
         next if _safeeq($Recurrence->{start}, $recurrenceId);
@@ -2715,6 +2717,9 @@ sub _minimise {
       }
       next if _safeeq($Recurrence->{$Key}, $Event->{$Key});
       _add_override(\%override, _quotekey($Key), $Recurrence->{$Key}, $Event->{$Key});
+    }
+    foreach my $Key (sort keys %oldkeys) {
+      $override{$Key} = $JSON::null;
     }
     next unless keys %override;
 
