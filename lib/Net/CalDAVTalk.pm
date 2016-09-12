@@ -15,7 +15,7 @@ use Data::ICal::Entry::Alarm::Email;
 use Data::ICal::Entry::Alarm::Display;
 use DateTime::Format::ICal;
 use DateTime::TimeZone;
-use JSON;
+use JSON::XS qw(encode_json);
 use Net::CalDAVTalk::TimeZones;
 use Text::VCardFast qw(vcard2hash);
 use XML::Spice;
@@ -885,9 +885,12 @@ sub GetEvents {
 
   # }}}
 
-  my @CalProps;
+  my %CalProps;
   if ($Args{ContentType}) {
-    push @CalProps, 'content-type' => $Args{ContentType};
+    $CalProps{'content-type'} = $Args{ContentType};
+  }
+  if ($Args{Version}) {
+    $CalProps{'version'} = $Args{Version};
   }
 
   my $Response = $Self->Request(
@@ -895,7 +898,7 @@ sub GetEvents {
     "$calendarId/",
     x($TopLevel, $Self->NS(),
       x('D:prop',
-        x('C:calendar-data', @CalProps),
+        x('C:calendar-data', \%CalProps),
         @Annotations,
       ),
       $Filter,
@@ -2639,6 +2642,38 @@ sub GetICal {
   return undef; # 404
 }
 
+sub _quotekey {
+  my $key = shift;
+  $key =~ s/\~/~0/gs;
+  $key =~ s/\//~1/gs;
+  return $key;
+}
+
+sub _add_override {
+  my ($override, $prefix, $New, $Old) = @_;
+
+  # basic case - it's not an object, so we just override
+  unless (ref($New) eq 'HASH' and ref($Old) eq 'HASH') {
+    $override->{$prefix} = $New;
+    return;
+  }
+
+  # XXX - if too many, we could just abort...
+  my %subover;
+  foreach my $Key (sort keys %$New) {
+    next if _safeeq($New->{$Key}, $Old->{$Key});
+    _add_override(\%subover, "$prefix/" . _quotekey($Key), $New->{$Key}, $Old->{$Key});
+  }
+
+  # which one is better?
+  if (length(encode_json($New)) < length(encode_json(\%subover))) {
+    $override->{$prefix} = $New; # cheaper to just encode the whole object
+  }
+  else {
+    $override->{$_} = $subover{$_} for keys %subover;
+  }
+}
+
 sub _minimise {
   my $Self = shift;
   my $Event = shift;
@@ -2652,11 +2687,15 @@ sub _minimise {
     my $Recurrence = $exceptions->{$recurrenceId};
 
     my %override;
-    foreach my $Key (keys %$Recurrence) {
-      my $value = $Key eq 'start' ? $recurrenceId : $Event->{$Key};
-      next if _safeeq($Recurrence->{$Key}, $value);
-      # XXX - support deeper change calculation
-      $override{"/$Key"} = $Recurrence->{$Key};
+    foreach my $Key (sort keys %$Recurrence) {
+      if ($Key eq 'start') {
+        # special case, it's the recurrence-id
+        next if _safeeq($Recurrence->{start}, $recurrenceId);
+        $override{start} = $Event->{start};
+        next;
+      }
+      next if _safeeq($Recurrence->{$Key}, $Event->{$Key});
+      _add_override(\%override, _quotekey($Key), $Recurrence->{$Key}, $Event->{$Key});
     }
     next unless keys %override;
 
@@ -2671,14 +2710,18 @@ sub _apply_patch {
   my $hash = shift;
   my $value = shift;
 
-  return unless $path =~ s{^/([^/]+)}{}; # who said regexes are unreadable?
+  return unless $path =~ s{^([^/]+)(/?)}{};
   return unless ref($hash) eq 'HASH';
   my $key = $1;
-  if ($path) {
+  my $slash = $2;
+  if ($slash) {
     _apply_patch($path, $hash->{$key}, $value);
   }
-  else {
+  elsif(defined $value) {
     $hash->{$key} = $value;
+  }
+  else {
+    delete $hash->{$key};
   }
 }
 
