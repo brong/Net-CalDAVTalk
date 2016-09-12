@@ -2674,7 +2674,7 @@ sub _add_override {
     _add_override(\%subover, "$prefix/" . _quotekey($Key), $New->{$Key}, $Old->{$Key});
   }
   foreach my $Key (sort keys %oldkeys) {
-    $subover->{$Key} = $JSON::null;
+    $subover{$Key} = $JSON::null;
   }
 
   # which one is better?
