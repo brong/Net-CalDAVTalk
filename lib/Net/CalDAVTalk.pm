@@ -1890,7 +1890,7 @@ sub _getEventsFromVCalendar {
           rel => 'enclosure',
           defined $filename ? (title => $filename) : (),
           defined $mime ? (type => $mime) : (),
-          defined $size ? (size => $size) : (),
+          defined $size ? (size => 0+$size) : (),
         };
       }
       foreach my $URL (@{$VEvent->{properties}{url} || []}) {
