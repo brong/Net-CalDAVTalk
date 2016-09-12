@@ -1570,8 +1570,6 @@ sub _getEventsFromVCalendar {
       my @description;
       push @description, $Properties{description}{value}
         if defined $Properties{description}{value};
-      push @description, map { $_->{value} } @{$VEvent->{properties}{url}}
-        if $VEvent->{properties}{url};
 
       # }}}
 
