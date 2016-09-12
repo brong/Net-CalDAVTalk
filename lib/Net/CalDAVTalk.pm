@@ -2667,9 +2667,14 @@ sub _add_override {
 
   # XXX - if too many, we could just abort...
   my %subover;
+  my %oldkeys = keys %$Old;
   foreach my $Key (sort keys %$New) {
+    delete $oldkeys{$Key};
     next if _safeeq($New->{$Key}, $Old->{$Key});
     _add_override(\%subover, "$prefix/" . _quotekey($Key), $New->{$Key}, $Old->{$Key});
+  }
+  foreach my $Key (sort keys %oldkeys) {
+    $subover->{$Key} = $JSON::null;
   }
 
   # which one is better?
