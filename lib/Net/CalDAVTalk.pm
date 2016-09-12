@@ -1852,16 +1852,13 @@ sub _getEventsFromVCalendar {
 
       # parse attachments {{{
 
-      my @Attachments;
+      my %Links;
       foreach my $Attach (@{$VEvent->{properties}{attach} || []}) {
         next unless $Attach->{value};
         next unless grep { $Attach->{value} =~ m{^$_://} } qw{http https ftp};
 
         my $uri = $Attach->{value};
         my $filename = $Attach->{params}{filename}[0];
-        if (not defined $filename and $uri =~ m{/([^/]+)$}) {
-          $filename = $1;
-        }
         # XXX - mime guessing?
         my $mime = $Attach->{params}{fmttype}[0];
         if (not defined $mime) {
@@ -1872,12 +1869,18 @@ sub _getEventsFromVCalendar {
 
         my $size = $Attach->{params}{size}[0];
 
-        push @Attachments, {
-          uri => $uri,
-          name => $filename,
-          $mime ? (type => $mime) : (),
-          $size ? (size => $size) : (),
+        $Links{$uri} = {
+          href => $uri,
+          rel => 'enclosure',
+          defined $filename ? (title => $filename) : (),
+          defined $mime ? (type => $mime) : (),
+          defined $size ? (size => $size) : (),
         };
+      }
+      foreach my $URL (@{$VEvent->{properties}{url} || []}) {
+        my $uri = $URL->{value};
+        next unless $uri;
+        $Links{$uri} = { href => $uri };
       }
 
       # }}}
@@ -1904,8 +1907,7 @@ sub _getEventsFromVCalendar {
       $Event{title} = $Properties{summary}{value} if $Properties{summary}{value};
       $Event{description} = join("\n", @description) if @description;
       # htmlDescription is not supported
-      # links is not supported yet
-      $Event{attachments} = \@Attachments if @Attachments;
+      $Event{links} = \%Links if %Links;
       # language is not supported
       # translations is not supported
 
@@ -2297,18 +2299,25 @@ sub _argsToVEvents {
     }
   }
 
-  if ($Args->{attachments}) {
-    foreach my $Attach (@{$Args->{attachments}}) {
-      my $Url = $Attach->{url};
-      my $FileName = $Attach->{name};
-      my $Mime = $Attach->{type};
-      my $Size = $Attach->{size};
+  if ($Args->{links}) {
+    foreach my $uri (sort keys %{$Args->{links}}) {
+      my $Attach = $Args->{links}{$uri};
+      my $Url = $Attach->{href} || $uri;
+      if ($Attach->{rel} eq 'enclosure') {
+        my $FileName = $Attach->{title};
+        my $Mime = $Attach->{type};
+        my $Size = $Attach->{size};
 
-      my %AttachProps;
-      $AttachProps{FMTTYPE} = $Mime if defined $Mime;
-      $AttachProps{SIZE} = $Size if defined $Size;
-      $AttachProps{FILENAME} = $FileName if defined $FileName;
-      $VEvent->add_property(attach => [ $Url, \%AttachProps ]);
+        my %AttachProps;
+        $AttachProps{FMTTYPE} = $Mime if defined $Mime;
+        $AttachProps{SIZE} = $Size if defined $Size;
+        $AttachProps{FILENAME} = $FileName if defined $FileName;
+        $VEvent->add_property(attach => [ $Url, \%AttachProps ]);
+      }
+      # otherwise it's just a URL
+      else {
+        $VEvent->add_property(url => [ $Url ]);
+      }
     }
   }
 
