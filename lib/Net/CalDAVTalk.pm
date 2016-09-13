@@ -2253,9 +2253,9 @@ sub _argsToVEvents {
     for my $id (sort keys %{$Args->{alerts}}) {
       my $Alert = $Args->{alerts}{$id};
 
-      my $Type          = $Alert->{type} // '';
-      my $Recipients    = $Alert->{recipients} // [];
-      my $Uri           = $Alert->{uri} // '';
+      my $Type          = $Alert->{action}{type} // '';
+      my $Recipients    = $Alert->{action}{recipients} // [];
+      my $Uri           = $Alert->{action}{uri} // '';
       my $Offset        = $Alert->{offset};
       my $Sign          = $Alert->{relativeTo} =~ m/before/ ? '-' : '';
       my $Loc1          = $Alert->{relativeTo} =~ m/end/ ? "ends" : "starts";
