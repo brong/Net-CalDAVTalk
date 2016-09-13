@@ -2314,7 +2314,7 @@ sub _argsToVEvents {
       foreach my $prop (keys %AttendeeProps) {
         delete $AttendeeProps{$prop} if $AttendeeProps{$prop} eq '';
       }
-      if (grep { $_ eq 'chair' } @$Attendee->{roles}) {
+      if (grep { $_ eq 'chair' } @{$Attendee->{roles}}) {
         $Attendee->{ROLE} = 'CHAIR';
       }
       elsif ($Attendee->{schedulePriority} and $Attendee->{schedulePriority} eq 'optional') {
