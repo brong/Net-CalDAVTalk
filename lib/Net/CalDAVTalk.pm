@@ -2183,8 +2183,9 @@ sub _argsToVEvents {
     next if $Prop eq '';
     my %lang;
     $lang{language} = $Args->{language} if exists $Args->{language};
-    $Property = 'summary' if $Property eq 'title';
-    $VEvent->add_property($Property => [$Prop, \%lang]);
+    my $key = $Property;
+    $key = 'summary' if $Property eq 'title';
+    $VEvent->add_property($key => [$Prop, \%lang]);
   }
 
   # dates in UTC - stored in UTC
