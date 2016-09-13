@@ -2171,7 +2171,6 @@ sub _argsToVEvents {
     uid      => $Args->{uid},
     sequence => ($Args->{sequence} || 0),
     transp   => ($Args->{showAsFree} ? 'TRANSPARENT' : 'OPAQUE'),
-    summary => $Args->{title},
   );
 
   if ($recurrenceId) {
@@ -2179,12 +2178,13 @@ sub _argsToVEvents {
   }
 
   # direct copy if properties exist
-  foreach my $Property (qw{description location}) {
+  foreach my $Property (qw{description title}) {
     my $Prop = $Args->{$Property} // '';
     next if $Prop eq '';
     my %lang;
     $lang{language} = $Args->{language} if exists $Args->{language};
-    $VEvent->add_property($Property => $Prop, \%lang);
+    $Property = 'summary' if $Property eq 'title';
+    $VEvent->add_property($Property => [$Prop, \%lang]);
   }
 
   # dates in UTC - stored in UTC
