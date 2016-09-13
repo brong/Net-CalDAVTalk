@@ -1793,34 +1793,41 @@ sub _getEventsFromVCalendar {
 
         my %Alert;
 
-        my $Action = lc $AlarmProperties{action}{value};
-        next unless $Action;
+        my $AlarmAction = lc $AlarmProperties{action}{value};
+        next unless $AlarmAction;
 
-        if ($Action eq 'display') {
-          $Alert{type} = 'display';
+        my %Action;
+
+        if ($AlarmAction eq 'display') {
+          $Action{type} = 'display';
         }
-        elsif ($Action eq 'email') {
-          $Alert{type} = 'email';
+        elsif ($AlarmAction eq 'email') {
+          $Action{type} = 'email';
 
-          $Alert{to} = [
+          $Action{to} = [
             map { my ($x) = $_->{value} =~ m/^(?:mailto:)?(.*)/i; { email => $x } }
             @{$VAlarm->{properties}{attendee} // []}
           ];
         }
-        elsif ($Action eq 'uri') {
-          $Alert{type} = 'uri';
-          $Alert{uri} = $VAlarm->{properties}{uri} // [];
+        elsif ($AlarmAction eq 'uri') {
+          $Action{type} = 'uri';
+          $Action{uri} = $VAlarm->{properties}{uri} // [];
         }
-        elsif ($Action eq 'audio') {
-          # audio alerts aren't the same as popups
-          next;
+        elsif ($AlarmAction eq 'audio') {
+          # audio alerts aren't the same as popups, but for now...
+          $Action{type} = 'display';
         }
-        elsif ($Action eq 'none') {
+        elsif ($AlarmAction eq 'none') {
           next;
         }
         else {
-          warn "$uid: UNKNOWN VALARM ACTION $Action";
+          warn "$uid: UNKNOWN VALARM ACTION $AlarmAction";
           next;
+        }
+
+        if ($VAlarm->{acknowledged}) {
+          my $date = $Self->_getDateObj($Calendar, $VAlarm->{acknowledged});
+          $Action{acknowledgedUntil} = $date->iso8601();
         }
 
         my $Trigger = $AlarmProperties{trigger}{value}
@@ -1848,6 +1855,7 @@ sub _getEventsFromVCalendar {
           $Alert{relativeTo} = "after-$Related";
         }
 
+        $Alert{action} = \%Action;
         $Alert{offset} = $Self->_make_duration($Duration);
 
         $Alerts{$alarmuid} = \%Alert;
