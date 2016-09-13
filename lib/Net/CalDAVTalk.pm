@@ -2301,6 +2301,7 @@ sub _argsToVEvents {
 
       next unless grep { $_ eq 'attendee' } @{$Attendee->{roles}};
 
+      $AttendeeProps{"CUTYPE"}     = uc $Attendee->{"kind"} if defined $Attendee->{"kind"};
       $AttendeeProps{"RSVP"}       = uc $Attendee->{"scheduleRSVP"} if defined $Attendee->{"scheduleRSVP"};
       $AttendeeProps{"X-SEQUENCE"} = $Attendee->{"x-sequence"} if defined $Attendee->{"x-sequence"};
       $AttendeeProps{"X-DTSTAMP"}  = $Attendee->{"x-dtstamp"}  if defined $Attendee->{"x-dtstamp"};
