@@ -25,6 +25,7 @@ foreach my $name (@list) {
   my $api = slurp($name, 'je');
   my @idata = $cdt->vcalendarToEvents($ical);
   die JSON::XS->new->pretty(1)->canonical(1)->encode(\@idata) unless $api;
+  warn JSON::XS->new->pretty(1)->canonical(1)->encode(\@idata) if $ENV{NOISY};
 
   my $adata = JSON::XS::decode_json($api);
 
