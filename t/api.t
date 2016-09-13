@@ -33,8 +33,10 @@ foreach my $name (@list) {
 
   # round trip it
   my $new = $cdt->_argsToVCalendar(\@idata);
+  my $newical = $new->as_string();
+  warn $newical if $ENV{NOISY};
   # and round trip it back again
-  my @back = $cdt->vcalendarToEvents($new);
+  my @back = $cdt->vcalendarToEvents($newical);
   # and it's still the same
   is_deeply(\@back, $adata, "$name roundtrip");
 }
