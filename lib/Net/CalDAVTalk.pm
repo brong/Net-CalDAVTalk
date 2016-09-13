@@ -1947,10 +1947,10 @@ sub _getEventsFromVCalendar {
       # ============= Where
       # XXX - support more structured representations from VEVENTs
       if ($Properties{location}{value}) {
-        push @{$Event{locations}}, [ { name => $Properties{location}{value} } ];
+        $Event{locations}{location} = { name => $Properties{location}{value} };
       }
       if (not $IsAllDay and $StartTimeZone and $StartTimeZone ne $EndTimeZone) {
-        push @{$Event{locations}}, [ { rel => 'end', timeZone => $EndTimeZone } ];
+        $Event{locations}{end} = { rel => 'end', timeZone => $EndTimeZone };
       }
 
       # ============= When
