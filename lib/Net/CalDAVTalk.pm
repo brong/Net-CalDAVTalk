@@ -1949,7 +1949,7 @@ sub _getEventsFromVCalendar {
         $Event{showAsFree} = $JSON::true if lc($Properties{transp}{value}) eq 'transparent';
       }
       foreach my $email (sort keys %Participants) { # later wins
-        $Event{replyTo} = $email if grep { $_ eq 'owner' } @{$Participants{$email}{roles}};
+        $Event{replyTo} = { imip => "mailto:$email" } if grep { $_ eq 'owner' } @{$Participants{$email}{roles}};
       }
       $Event{participants} = \%Participants if %Participants;
 
@@ -2286,6 +2286,7 @@ sub _argsToVEvents {
     }
   }
 
+  my %namemap;
   if ($Args->{participants}) {
     foreach my $Address (sort keys %{$Args->{participants}}) {
       my $Attendee = $Args->{participants}{$Address};
@@ -2293,10 +2294,13 @@ sub _argsToVEvents {
       my $Rsvp  = $Attendee->{rsvp};
 
       my %AttendeeProps;
-      $AttendeeProps{"CN"}         = $Attendee->{"name"}       if defined $Attendee->{"name"};
-      if (grep { $_ eq 'owner' } @{$Attendee->{"roles"} || []}) {
-        $VEvent->add_property(organizer => [ "MAILTO:$Email", \%AttendeeProps ]);
+      if ($Attendee->{"name"}) {
+        $AttendeeProps{"CN"} = $Attendee->{"name"};
+        $namemap{lc "mailto:$Email"}= $Attendee->{"name"};
       }
+
+      next unless grep { $_ eq 'attendee' } @{$Attendee->{roles}};
+
       $AttendeeProps{"RSVP"}       = uc $Attendee->{"scheduleRSVP"} if defined $Attendee->{"scheduleRSVP"};
       $AttendeeProps{"X-SEQUENCE"} = $Attendee->{"x-sequence"} if defined $Attendee->{"x-sequence"};
       $AttendeeProps{"X-DTSTAMP"}  = $Attendee->{"x-dtstamp"}  if defined $Attendee->{"x-dtstamp"};
@@ -2307,6 +2311,12 @@ sub _argsToVEvents {
       $AttendeeProps{PARTSTAT} = uc $Attendee->{"scheduleStatus"} if $Attendee->{"scheduleStatus"};
 
       $VEvent->add_property(attendee => [ "MAILTO:$Email", \%AttendeeProps ]);
+    }
+  }
+  if ($Args->{replyTo}) {
+    if ($Args->{replyTo}{imip}) {
+      my $CN = $namemap{lc $Args->{replyTo}{imip}};
+      $VEvent->add_property(organizer => [ $Args->{replyTo}{imip}, $CN ? {CN => $CN} : () ]);
     }
   }
 
