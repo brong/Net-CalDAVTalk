@@ -2390,6 +2390,7 @@ sub _argsToVCalendar {
   my %ExtraProp = @_;
 
   my $VCalendar = Data::ICal->new();
+  my $havepid = 0;
 
   foreach my $extra (keys %ExtraProp) {
     $VCalendar->add_properties($extra => $ExtraProp{$extra});
@@ -2399,6 +2400,10 @@ sub _argsToVCalendar {
   my @VEvents;
   my %TimeZones;
   foreach my $Args (ref $Item eq 'ARRAY' ? @$Item : $Item) {
+    if (not $havepid and $Args->{prodId}) {
+      $VCalendar->add_properties('prodid' => $Args->{prodId});
+      $havepid = 1;
+    }
     # initialise timestamp if not given one
     $Args->{dtstamp} //= DateTime->now()->strftime('%Y-%m-%dT%H:%M:%S');
     push @VEvents, $Self->_argsToVEvents(\%TimeZones, $Args);
