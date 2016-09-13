@@ -1826,8 +1826,8 @@ sub _getEventsFromVCalendar {
           next;
         }
 
-        if ($VAlarm->{acknowledged}) {
-          my $date = $Self->_getDateObj($Calendar, $VAlarm->{acknowledged});
+        if ($AlarmProperties{acknowledged}) {
+          my $date = $Self->_getDateObj($Calendar, $AlarmProperties{acknowledged});
           $Action{acknowledgedUntil} = $date->iso8601();
         }
 
