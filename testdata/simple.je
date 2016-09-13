@@ -1,18 +1,18 @@
 [
-   {
-      "created" : "2015-09-28T12:52:12",
-      "description" : "double yo",
-      "duration" : "PT1H",
-      "isAllDay" : false,
-      "locale" : "en",
-      "prodId" : "-//Apple Inc.//Mac OS X 10.9.5//EN",
-      "sequence" : 9,
-      "showAsFree" : true,
-      "start" : "2016-09-28T16:00:00",
-      "timeZone" : "Etc/UTC",
-      "title" : "yo",
-      "uid" : "2a358cee-6489-4f14-a57f-c104db4dc357",
-      "updated" : "2015-09-28T13:24:34"
-   }
+{
+  "uid" : "9f160501-da22-4a96-a4e9-c56cef8158e8",
+  "updated" : "2016-09-13T12:16:00",
+  "sequence" : 1,
+  "title" : "Simple Event",
+  "prodId" : "test",
+  "locations" : {
+    "location": {
+      "name" : "At a location"
+    }
+  },
+  "isAllDay" : false,
+  "start" : "2016-09-16T10:00:00",
+  "timeZone" : "Europe/Berlin",
+  "duration" : "PT1H"
+}
 ]
-
