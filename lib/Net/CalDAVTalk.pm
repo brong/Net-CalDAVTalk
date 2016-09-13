@@ -1500,7 +1500,12 @@ sub _makeParticipant {
     $Participants->{$id}{scheduleStatus} = lc($VAttendee->{params}{"partstat"}[0] // "needs-action");
   }
   if ($VAttendee->{params}{"role"}) {
-    $Participants->{$id}{schedulePriority} = lc($VAttendee->{params}{"role"}[0] // "required");
+    push @{$Participants->{$id}{roles}}, 'chair'
+      if uc $VAttendee->{params}{"role"}[0] eq 'CHAIR';
+    $Participants->{$id}{schedulePriority} = 'optional'
+      if uc $VAttendee->{params}{"role"}[0] eq 'OPT-PARTICIPANT';
+    $Participants->{$id}{schedulePriority} = 'non-participant'
+      if uc $VAttendee->{params}{"role"}[0] eq 'NON-PARTICIPANT';
   }
   if ($VAttendee->{params}{"rsvp"}) {
     $Participants->{$id}{scheduleRSVP} = lc($VAttendee->{params}{"rsvp"}[0] // "") eq 'yes' ? $JSON::true : $JSON::false;
@@ -2308,6 +2313,16 @@ sub _argsToVEvents {
       foreach my $prop (keys %AttendeeProps) {
         delete $AttendeeProps{$prop} if $AttendeeProps{$prop} eq '';
       }
+      if (grep { $_ eq 'chair' } @$Attendee->{roles}) {
+        $Attendee->{ROLE} = 'CHAIR';
+      }
+      elsif ($Attendee->{schedulePriority} and $Attendee->{schedulePriority} eq 'optional') {
+        $Attendee->{ROLE} = 'OPT-PARTICIPANT';
+      }
+      elsif ($Attendee->{schedulePriority} and $Attendee->{schedulePriority} eq 'non-participant') {
+        $Attendee->{ROLE} = 'NON-PARTICIPANT';
+      }
+      # default is REQ-PARTICIPANT
 
       $AttendeeProps{PARTSTAT} = uc $Attendee->{"scheduleStatus"} if $Attendee->{"scheduleStatus"};
 
