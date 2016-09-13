@@ -1932,7 +1932,7 @@ sub _getEventsFromVCalendar {
       if ($Properties{summary} and $Properties{summary}{params}{language}) {
         $language = $Properties{summary}{params}{language}[0];
       }
-      $Event{language} = $language if $language;
+      $Event{locale} = $language if $language;
       # translations is not supported
 
       # ============= Where
@@ -2182,7 +2182,7 @@ sub _argsToVEvents {
     my $Prop = $Args->{$Property} // '';
     next if $Prop eq '';
     my %lang;
-    $lang{language} = $Args->{language} if exists $Args->{language};
+    $lang{language} = $Args->{locale} if exists $Args->{locale};
     my $key = $Property;
     $key = 'summary' if $Property eq 'title';
     $VEvent->add_property($key => [$Prop, \%lang]);
