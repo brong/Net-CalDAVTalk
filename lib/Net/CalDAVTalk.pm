@@ -24,6 +24,16 @@ use MIME::Types;
 use Digest::SHA qw(sha1_hex);
 use URI::Escape qw(uri_unescape);
 
+# monkey patch like a bandit
+BEGIN {
+  my @properties = Data::ICal::Entry::Alarm::optional_unique_properties();
+  foreach my $want (qw(uid acknowledged)) {
+    push @properties, $want unless grep { $_ eq $want } @properties;
+  }
+  no warnings 'redefine';
+  *Data::ICal::Entry::Alarm::optional_unique_properties = sub { @properties };
+}
+
 our (
   $DefaultCalendarColour,
   $DefaultDisplayName,
@@ -2202,18 +2212,22 @@ sub _argsToVEvents {
   $VEvent->add_property(dtstamp => $Self->_makeZTime($Args->{updated} || DateTime->now->iso8601()));
 
   # dates in localtime - zones based on location
-  my $StartTimeZone = $Args->{timeZone};
-  my $EndTimeZone   = $Args->{timeZone};
-  if ($Args->{location}) {
-    foreach my $location (@{$Args->{location}}) {
-      next unless ($location->{rel} and $location->{rel} eq 'end');
-      $EndTimeZone = $location->{timeZone} if $location->{timeZone};
+  my $EndTimeZone;
+  my $locations = $Args->{locations} || {};
+  foreach my $id (sort keys %$locations) {
+    if ($locations->{$id}{rel} and $locations->{id}{rel} eq 'end') {
+      $EndTimeZone = $locations->{end}{timeZone};
+    }
+    if ($locations->{$id}{name}) {
+      $VEvent->add_property(location => $locations->{$id}{name});
     }
   }
 
+  my $StartTimeZone = $Args->{timeZone};
   my $Start = _wireDate($Args->{start}, $StartTimeZone);
   $VEvent->add_property(dtstart => $Self->_makeVTimeObj($TimeZones, $Start, $StartTimeZone, $Args->{isAllDay}));
   if ($Args->{duration}) {
+    $EndTimeZone //= $StartTimeZone;
     my $Duration = eval { DateTime::Format::ICal->parse_duration($Args->{duration}) };
     my $End = $Start->clone()->add($Duration) if $Duration;
     $VEvent->add_property(dtend => $Self->_makeVTimeObj($TimeZones, $End, $EndTimeZone, $Args->{isAllDay}));
@@ -2305,8 +2319,14 @@ sub _argsToVEvents {
         confess "Unknown alarm type $Type";
       }
 
+      $VAlarm->add_property(uid => $id);
       $VAlarm->add_property(trigger => "${Sign}$Offset");
       $VAlarm->add_property(related => 'end') if $Alert->{relativeTo} =~ m/end/;
+
+      if ($Alert->{action}{acknowledgedUntil}) {
+        $VAlarm->add_property(acknowledged => $Self->_makeZTime($Alert->{action}{acknowledgedUntil}));
+      }
+
       $VEvent->add_entry($VAlarm);
     }
   }
@@ -2329,7 +2349,7 @@ sub _argsToVEvents {
       $AttendeeProps{"CUTYPE"}     = uc $Attendee->{"kind"} if defined $Attendee->{"kind"};
       $AttendeeProps{"RSVP"}       = uc $Attendee->{"scheduleRSVP"} if defined $Attendee->{"scheduleRSVP"};
       $AttendeeProps{"X-SEQUENCE"} = $Attendee->{"x-sequence"} if defined $Attendee->{"x-sequence"};
-      $AttendeeProps{"X-DTSTAMP"}  = $Self->_makeZTime($Attendee->{"x-dtstamp"}) if defined $Attendee->{"x-dtstamp"};
+      $AttendeeProps{"X-DTSTAMP"}  = $Self->_makeZTime($Attendee->{"scheduleUpdated"}) if defined $Attendee->{"scheduleUpdated"};
       foreach my $prop (keys %AttendeeProps) {
         delete $AttendeeProps{$prop} if $AttendeeProps{$prop} eq '';
       }
