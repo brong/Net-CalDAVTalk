@@ -53,6 +53,7 @@ my (
   @Frequencies,
   %RecurrenceProperties,
   %UTCLinks,
+  %MustBeTopLevel,
 );
 
 BEGIN {
@@ -140,6 +141,19 @@ BEGIN {
       signed => 1,
     },
   );
+
+  %MustBeTopLevel = map { $_ => 1 } qw{
+    uid
+    relatedTo
+    prodId
+    isAllDay
+    recurrenceRule
+    recurrenceOverrides
+    replyTo
+    participantId
+  };
+  # not in tc-api / JMAP, but necessary for iMIP
+  $MustBeTopLevel{method} = 1;
 
   # Colour names defined in CSS Color Module Level 3
   # http://www.w3.org/TR/css3-color/
@@ -931,9 +945,6 @@ sub GetEvents {
       if ($Args{Full}) {
         $Event->{_raw} = $Data;
       }
-      else {
-        $Self->_minimise($Event);
-      }
 
       $Event->{href} = $href;
       $Event->{id} = $Self->shortpath($href);
@@ -1127,9 +1138,6 @@ sub SyncEvents {
 
         if ($Args{Full}) {
           $Event->{_raw} = $Data;
-        }
-        else {
-          $Self->_minimise($Event);
         }
 
         $Event->{href} = $href;
@@ -1545,6 +1553,7 @@ sub _getEventsFromVCalendar {
     next unless lc $Calendar->{type} eq 'vcalendar';
 
     my $method = $Calendar->{properties}{method}[0]{value};
+    my $prodid = $Calendar->{properties}{prodid}[0]{value};
 
     foreach my $VEvent (@{$Calendar->{objects} || []}) {
       next unless lc $VEvent->{type} eq 'vevent';
@@ -1890,7 +1899,7 @@ sub _getEventsFromVCalendar {
       # ============= Metadata
       my %Event = (uid => $uid);
       # no support for relatedTo yet
-      # no support for prodId at this level
+      $Event{prodId} = $prodid;
       if ($Properties{created}{value}) {
         # UTC item
         my $Date = eval { $Self->_getDateObj($Calendar, $Properties{created}, 'UTC') };
@@ -2140,7 +2149,7 @@ sub _makeLTime {
 sub _argsToVEvents {
   my $Self = shift;
   my ($TimeZones, $Args, $recurrenceId) = @_;
-  my @SubVEvents;
+  my @VEvents;
 
   my $VEvent = Data::ICal::Entry::Event->new();
 
@@ -2203,7 +2212,7 @@ sub _argsToVEvents {
       if ($val) {
         if (keys %$val) {
           my $SubEvent = $Self->_maximise($Args, $val, $recurrenceId);
-          push @SubVEvents, $Self->_argsToVEvents($TimeZones, $SubEvent, $recurrenceId);
+          push @VEvents, $Self->_argsToVEvents($TimeZones, $SubEvent, $recurrenceId);
         }
         else {
           $VEvent->add_property(rdate => $Self->_makeLTime($TimeZones, $recurrenceId, $StartTimeZone, $Args->{isAllDay}));
@@ -2323,7 +2332,10 @@ sub _argsToVEvents {
     }
   }
 
-  return ($VEvent, @SubVEvents);
+  # detect if this is a dummy top-level event and skip it
+  unshift @VEvents, $VEvent unless ($Args->{replyTo} and not $Args->{participants});
+
+  return @VEvents;
 }
 
 sub _argsToVCalendar {
@@ -2530,6 +2542,36 @@ e.g.
 
 =cut
 
+sub _insert_override {
+  my $Event = shift;
+  my $recurrenceId = shift;
+  my $Recurrence = shift;
+
+  my %override;
+  my %oldkeys = map { $_ => 1 } keys %$Event;
+  foreach my $Key (sort keys %$Recurrence) {
+    delete $oldkeys{$Key};
+    next if $MustBeTopLevel{$Key}; # XXX - check safeeq and die?
+    if ($Key eq 'start') {
+      # special case, it's the recurrence-id
+      next if _safeeq($Recurrence->{start}, $recurrenceId);
+      $override{start} = $Event->{start};
+      next;
+    }
+    next if _safeeq($Recurrence->{$Key}, $Event->{$Key});
+    _add_override(\%override, _quotekey($Key), $Recurrence->{$Key}, $Event->{$Key});
+  }
+
+  foreach my $Key (sort keys %oldkeys) {
+    next if $MustBeTopLevel{$Key};
+    $override{$Key} = $JSON::null;
+  }
+
+  # in theory should never happen, but you could edit something back to be identical
+  return unless %override;
+  $Event->{recurrenceOverrides}{$recurrenceId} = \%override;
+}
+
 sub vcalendarToEvents {
   my $Self = shift;
   my $Data = shift;
@@ -2545,43 +2587,40 @@ sub vcalendarToEvents {
     my $uid = $Event->{uid};
     my $recurrenceId = delete $Event->{'_recurrenceId'};
     if ($recurrenceId) {
-      # never in sub records
-      delete $Event->{recurrence};
-      delete $Event->{exceptions};
-      delete $Event->{inclusions};
       $exceptions{$uid}{$recurrenceId} = $Event;
     }
+    elsif ($map{$uid}) {
+      # it looks like sometimes Google doesn't remember to put the Recurrence ID
+      # on additional recurrences after the first one, which is going to screw up
+      # pretty badly because if the date has changed, then we can't even notice
+      # which recurrent it was SUPPOSED to be.  *sigh*.
+      warn "DUPLICATE EVENT FOR $uid\n" . Dumper($map{$uid}, $Event);
+      $map{$uid}{_dirty} = 1;
+      $exceptions{$uid}{$Event->{start}} = $Event;
+    }
     else {
-      if ($map{$uid}) {
-        # it looks like sometimes Google doesn't remember to put the Recurrence ID
-        # on additional recurrences after the first one, which is going to screw up
-        # pretty badly because if the date has changed, then we can't even notice
-        # which recurrent it was SUPPOSED to be.  *sigh*.
-        warn "DUPLICATE EVENT FOR $uid\n" . Dumper($map{$uid}, $Event);
-        $map{$uid}{_dirty} = 1;
-      }
-      else {
-        $map{$uid} = $Event;
-      }
+      $map{$uid} = $Event;
     }
   }
 
   foreach my $uid (keys %exceptions) {
-    foreach my $recur (sort keys %{$exceptions{$uid}}) {
-      if ($map{$uid}) {
-        $map{$uid}{exceptions}{$recur} = $exceptions{$uid}{$recur};
+    unless ($map{$uid}) {
+      # create a synthetic top-level
+      my ($first) = sort keys %{$exceptions{$uid}};
+      my $First = $exceptions{$uid}{$first};
+      $map{$uid} = {
+        uid => $uid,
+        # these two are required at top level, but may be different
+        # in recurrences so aren't in MustBeTopLevel
+        start => $First->{start},
+        updated => $First->{updated},
+      };
+      foreach my $key (keys %MustBeTopLevel) {
+        $map{$uid}{$key} = $First->{$key} if exists $First->{$key};
       }
-      else {
-        # event with ONLY exceptions.  WTF.  The RFC says it's OK though, RFC 4791
-        # section 4.1
-        #                                          [...] It is possible for a
-        # calendar object resource to just contain components that represent
-        # "overridden" instances (ones that modify the behavior of a regular
-        # instance, and thus include a RECURRENCE-ID property) without also
-        # including the "master" recurring component (the one that defines the
-        # recurrence "set" and does not contain any RECURRENCE-ID property).
-        $map{$uid} = $exceptions{$uid}{$recur};
-      }
+    }
+    foreach my $recurrenceId (sort keys %{$exceptions{$uid}}) {
+      _insert_override($map{$uid}, $recurrenceId, $exceptions{$uid}{$recurrenceId});
     }
   }
 
@@ -2695,42 +2734,6 @@ sub _add_override {
   else {
     $override->{$_} = $subover{$_} for keys %subover;
   }
-}
-
-sub _minimise {
-  my $Self = shift;
-  my $Event = shift;
-
-  confess unless ref($Event) eq 'HASH';
-
-  my $exceptions = delete $Event->{exceptions};
-  return $Event unless $exceptions;
-
-  foreach my $recurrenceId (sort keys %{$exceptions}) {
-    my $Recurrence = $exceptions->{$recurrenceId};
-
-    my %override;
-    my %oldkeys = map { $_ => 1 } keys %$Event;
-    foreach my $Key (sort keys %$Recurrence) {
-      delete $oldkeys{$Key};
-      if ($Key eq 'start') {
-        # special case, it's the recurrence-id
-        next if _safeeq($Recurrence->{start}, $recurrenceId);
-        $override{start} = $Event->{start};
-        next;
-      }
-      next if _safeeq($Recurrence->{$Key}, $Event->{$Key});
-      _add_override(\%override, _quotekey($Key), $Recurrence->{$Key}, $Event->{$Key});
-    }
-    foreach my $Key (sort keys %oldkeys) {
-      $override{$Key} = $JSON::null;
-    }
-    next unless keys %override;
-
-    $Event->{recurrenceOverrides}{$recurrenceId} = \%override;
-  }
-
-  return $Event;
 }
 
 sub _apply_patch {
