@@ -1917,15 +1917,22 @@ sub _getEventsFromVCalendar {
         $Event{updated} = $Date->iso8601() if $Date;
       }
       $Event{updated} ||= DateTime->now->iso8601();
-      $Event{sequence} = int($Properties{sequence}{value}) if $Properties{sequence}{value};
+      $Event{sequence} = int($Properties{sequence}{value}) if $Properties{sequence};
       $Event{method} = $method if $method;
 
       # ============= What
-      $Event{title} = $Properties{summary}{value} if $Properties{summary}{value};
+      $Event{title} = $Properties{summary}{value} if $Properties{summary};
       $Event{description} = join("\n", @description) if @description;
       # htmlDescription is not supported
       $Event{links} = \%Links if %Links;
-      # language is not supported
+      my $language;
+      if ($Properties{description} and $Properties{description}{params}{language}) {
+        $language = $Properties{description}{params}{language}[0];
+      }
+      if ($Properties{summary} and $Properties{summary}{params}{language}) {
+        $language = $Properties{summary}{params}{language}[0];
+      }
+      $Event{language} = $language if $language;
       # translations is not supported
 
       # ============= Where
@@ -2175,7 +2182,9 @@ sub _argsToVEvents {
   foreach my $Property (qw{description location}) {
     my $Prop = $Args->{$Property} // '';
     next if $Prop eq '';
-    $VEvent->add_property($Property => $Prop);
+    my %lang;
+    $lang{language} = $Args->{language} if exists $Args->{language};
+    $VEvent->add_property($Property => $Prop, \%lang);
   }
 
   # dates in UTC - stored in UTC
