@@ -2600,7 +2600,7 @@ sub _insert_override {
     if ($Key eq 'start') {
       # special case, it's the recurrence-id
       next if _safeeq($Recurrence->{start}, $recurrenceId);
-      $override{start} = $Event->{start};
+      $override{start} = $Recurrence->{start};
       next;
     }
     next if _safeeq($Recurrence->{$Key}, $Event->{$Key});
