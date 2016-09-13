@@ -1493,7 +1493,8 @@ sub _makeParticipant {
   # XXX - if present on one but not the other, take the "best" version
   $Participants->{$id}{name} = $VAttendee->{params}{"cn"}[0] // "";
   $Participants->{$id}{email} = $id;
-  $Participants->{$id}{kind} = lc($VAttendee->{params}{"cutype"}[0] // "unknown");
+  $Participants->{$id}{kind} = lc $VAttendee->{params}{"cutype"}[0]
+    if $VAttendee->{params}{"cutype"};
   push @{$Participants->{$id}{roles}}, $role;
   # we don't support locationId yet
   if ($VAttendee->{params}{"partstat"}) {
