@@ -16,7 +16,7 @@ while (my $item = readdir(DH)) {
 }
 closedir(DH);
 
-plan tests => scalar(@list);
+plan tests => scalar(@list) * 2;
 
 my $cdt = Net::CalDAVTalk->new(url => 'http://foo/');
 
@@ -30,6 +30,13 @@ foreach my $name (@list) {
   my $adata = JSON::XS::decode_json($api);
 
   is_deeply(\@idata, $adata, $name);
+
+  # round trip it
+  my $new = $cdt->_argsToVCalendar(\@idata);
+  # and round trip it back again
+  my @back = $cdt->vcalendarToEvents($new);
+  # and it's still the same
+  is_deeply(\@back, $adata, "$name roundtrip");
 }
 
 sub slurp {
