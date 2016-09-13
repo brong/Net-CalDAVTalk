@@ -1481,7 +1481,7 @@ sub _saneuid {
 }
 
 sub _makeParticipant {
-  my ($Self, $Participants, $VAttendee, $role) = @_;
+  my ($Self, $Calendar, $Participants, $VAttendee, $role) = @_;
 
   my $id = $VAttendee->{value};
   return unless $id;
@@ -1512,7 +1512,8 @@ sub _makeParticipant {
     $Participants->{$id}{scheduleRSVP} = lc($VAttendee->{params}{"rsvp"}[0] // "") eq 'yes' ? $JSON::true : $JSON::false;
   }
   if (exists $VAttendee->{params}{"x-dtstamp"}) {
-    $Participants->{$id}{"scheduleUpdated"} = $VAttendee->{params}{"x-dtstamp"}[0]  // "";
+    my ($Date) = eval { $Self->_makeDateObj($VAttendee->{params}{"x-dtstamp"}[0], 'UTC', 'UTC') };
+    $Participants->{$id}{"scheduleUpdated"} = $Date->iso8601() if $Date;
   }
   # memberOf is not supported
 
@@ -1867,10 +1868,10 @@ sub _getEventsFromVCalendar {
 
       my %Participants;
       for my $VOrganizer (@{$VEvent->{properties}{organizer} || []}) {
-        $Self->_makeParticipant(\%Participants, $VOrganizer, 'owner');
+        $Self->_makeParticipant($Calendar, \%Participants, $VOrganizer, 'owner');
       }
       for my $VAttendee (@{$VEvent->{properties}{attendee} || []}) {
-        $Self->_makeParticipant(\%Participants, $VAttendee, 'attendee');
+        $Self->_makeParticipant($Calendar, \%Participants, $VAttendee, 'attendee');
       }
 
       # }}}
@@ -2328,7 +2329,7 @@ sub _argsToVEvents {
       $AttendeeProps{"CUTYPE"}     = uc $Attendee->{"kind"} if defined $Attendee->{"kind"};
       $AttendeeProps{"RSVP"}       = uc $Attendee->{"scheduleRSVP"} if defined $Attendee->{"scheduleRSVP"};
       $AttendeeProps{"X-SEQUENCE"} = $Attendee->{"x-sequence"} if defined $Attendee->{"x-sequence"};
-      $AttendeeProps{"X-DTSTAMP"}  = $Attendee->{"x-dtstamp"}  if defined $Attendee->{"x-dtstamp"};
+      $AttendeeProps{"X-DTSTAMP"}  = $Self->_makeZTime($Attendee->{"x-dtstamp"}) if defined $Attendee->{"x-dtstamp"};
       foreach my $prop (keys %AttendeeProps) {
         delete $AttendeeProps{$prop} if $AttendeeProps{$prop} eq '';
       }
