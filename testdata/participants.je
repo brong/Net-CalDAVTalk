@@ -1,8 +1,8 @@
 [
 {
    "uid" : "0053564f-9b21-4d0e-a3cd-185dfb9f88fe",
-   "created" : "2016-07-25T07:43:01",
-   "updated" : "2016-05-07T07:33:09",
+   "created" : "2016-07-25T07:43:01Z",
+   "updated" : "2016-05-07T07:33:09Z",
    "sequence" : 2,
    "title" : "Lunch at du Fermier",
    "isAllDay" : false,
@@ -28,7 +28,7 @@
             "attendee"
          ],
          "scheduleStatus" : "accepted",
-         "scheduleUpdated" : "2016-05-07T07:08:08"
+         "scheduleUpdated" : "2016-05-07T07:08:08Z"
       },
       "diana@example.com" : {
          "email" : "diana@example.com",
@@ -38,7 +38,7 @@
             "attendee"
          ],
          "scheduleStatus" : "accepted",
-         "scheduleUpdated" : "2016-05-07T07:33:08"
+         "scheduleUpdated" : "2016-05-07T07:33:08Z"
       }
    }
 }

@@ -1649,7 +1649,7 @@ sub _makeParticipant {
   }
   if (exists $VAttendee->{params}{"x-dtstamp"}) {
     my ($Date) = eval { $Self->_makeDateObj($VAttendee->{params}{"x-dtstamp"}[0], 'UTC', 'UTC') };
-    $Participants->{$id}{"scheduleUpdated"} = $Date->iso8601() if $Date;
+    $Participants->{$id}{"scheduleUpdated"} = $Date->iso8601() . 'Z' if $Date;
   }
   # memberOf is not supported
 
@@ -2016,8 +2016,8 @@ sub _getEventsFromVCalendar {
         }
 
         if ($AlarmProperties{acknowledged}) {
-          my $date = $Self->_getDateObj($Calendar, $AlarmProperties{acknowledged});
-          $Action{acknowledgedUntil} = $date->iso8601();
+          my $date = $Self->_getDateObj($Calendar, $AlarmProperties{acknowledged}, 'UTC');
+          $Action{acknowledged} = $date->iso8601() . 'Z';
         }
 
         my $Trigger = $AlarmProperties{trigger}{value}
@@ -2503,8 +2503,8 @@ sub _argsToVEvents {
       $VAlarm->add_property(trigger => "${Sign}$Offset");
       $VAlarm->add_property(related => 'end') if $Alert->{relativeTo} =~ m/end/;
 
-      if ($Alert->{action}{acknowledgedUntil}) {
-        $VAlarm->add_property(acknowledged => $Self->_makeZTime($Alert->{action}{acknowledgedUntil}));
+      if ($Alert->{action}{acknowledged}) {
+        $VAlarm->add_property(acknowledged => $Self->_makeZTime($Alert->{action}{acknowledged}));
       }
 
       $VEvent->add_entry($VAlarm);
