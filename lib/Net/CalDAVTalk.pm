@@ -1725,7 +1725,12 @@ sub NormaliseEvent {
     # remove if it's the default
     if ($Spec->{$key}[1] eq 'object') {
       next unless $Copy{$key}; # no object
-      $Copy{$key} = $class->NormaliseEvent($Copy{$key}, $key);
+      if ($Spec->{$key}[0]) {
+        $Copy{$key} = [$class->NormaliseEvent(@{$Copy{$key}}, $key)];
+      }
+      else {
+        $Copy{$key} = $class->NormaliseEvent($Copy{$key}, $key);
+      }
     }
     else {
       delete $Copy{$key} if _safeeq($Spec->{$key}[3], $Copy{$key});
