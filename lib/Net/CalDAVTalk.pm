@@ -2232,10 +2232,11 @@ sub _getTimeZone {
 }
 
 sub _wireDate {
-  # format: YYYY-MM-DDTHH:MM:SS (no Z)
+  # format: YYYY-MM-DDTHH:MM:SS Z?
   my $isoDate = shift;
   my $timeZone = shift || $FLOATING;
-  confess "Invalid value '$isoDate' was not ISO8601" unless $isoDate =~ m/^(\d{4,})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)$/i;
+  confess "Invalid value '$isoDate' was not ISO8601" unless $isoDate =~ m/^(\d{4,})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(Z?)$/i;
+  $timeZone = 'Etc/UTC' if $7;
 
   my $Date = DateTime->_new(
     year => $1,
