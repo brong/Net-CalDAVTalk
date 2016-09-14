@@ -2107,12 +2107,12 @@ sub _getEventsFromVCalendar {
       if ($Properties{created}{value}) {
         # UTC item
         my $Date = eval { $Self->_getDateObj($Calendar, $Properties{created}, 'UTC') };
-        $Event{created} = $Date->iso8601() if $Date;
+        $Event{created} = $Date->iso8601() . 'Z' if $Date;
       }
       if ($Properties{dtstamp}{value}) {
         # UTC item
         my $Date = eval { $Self->_getDateObj($Calendar, $Properties{dtstamp}, 'UTC') };
-        $Event{updated} = $Date->iso8601() if $Date;
+        $Event{updated} = $Date->iso8601() . 'Z' if $Date;
       }
       $Event{updated} ||= DateTime->now->iso8601();
       $Event{sequence} = int($Properties{sequence}{value}) if $Properties{sequence};
@@ -2171,7 +2171,7 @@ sub _getEventsFromVCalendar {
       if ($Properties{lastmodified}{value}) {
         # UTC item
         my $Date = eval { $Self->_getDateObj($Calendar, $Properties{lastmodified}, 'UTC') };
-        $Event{lastModified} = $Date->iso8601();
+        $Event{lastModified} = $Date->iso8601() . 'Z';
       }
       if ($Properties{'recurrence-id'}{value}) {
         # in our system it's always in the timezone of the event, but iCloud
