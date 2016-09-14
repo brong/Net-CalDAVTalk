@@ -59,7 +59,6 @@ my (
   %DaysByName,
   %DaysByIndex,
   %ColourNames,
-  @EventProperties,
   @Frequencies,
   %RecurrenceProperties,
   %UTCLinks,
@@ -93,30 +92,6 @@ BEGIN {
   $DefaultCalendarColour = '#0252D4';
   $DefaultDisplayName    = 'Untitled Calendar';
   @Frequencies           = qw{yearly monthly weekly daily hourly minutely secondly};
-
-  @EventProperties = qw{
-    uid
-    sequence
-    created
-    lastModified
-    updated
-    summary
-    description
-    location
-    showAsFree
-    isAllDay
-    start
-    startTimeZone
-    end
-    endTimeZone
-    recurrence
-    exceptions
-    inclusions
-    alerts
-    attendees
-    organizer
-    attachments
-  };
 
   %EventKeys = (
     '' => {
@@ -1417,7 +1392,7 @@ sub _updateEvent {
 
   my %NewEvent;
 
-  foreach my $Property (@EventProperties) {
+  foreach my $Property (keys %EventKeys) {
     if (exists $Args->{$Property}) {
       if (defined $Args->{$Property}) {
         $NewEvent{$Property} = $Args->{$Property};
