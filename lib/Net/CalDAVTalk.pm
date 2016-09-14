@@ -1705,12 +1705,13 @@ sub NormaliseEvent {
   foreach my $key (sort keys %$Spec) {
     # remove if it's the default
     if ($Spec->{$key}[1] eq 'object') {
-      next unless $Copy{$key}; # no object
+      my $Item = delete $Copy{$key};
+      next unless $Item; # no object
       if ($Spec->{$key}[0]) {
-        $Copy{$key} = [$class->NormaliseEvent(@{$Copy{$key}}, $key)];
+        $Copy{$key} = [map { $class->NormaliseEvent($_, $key) } @$Item];
       }
       else {
-        $Copy{$key} = $class->NormaliseEvent($Copy{$key}, $key);
+        $Copy{$key} = $class->NormaliseEvent($Item, $key);
       }
     }
     else {
