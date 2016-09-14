@@ -578,6 +578,7 @@ sub GetCalendars {
     'C:calendar-timezone',
     'D:sync-token',
     'D:supported-report-set',
+    'C:supported-calendar-data',
     @{$Args{Properties} || []},
   );
 
@@ -620,6 +621,7 @@ sub GetCalendars {
         mayRead => $JSON::false,
         mayReadFreeBusy => $JSON::false,
       );
+
       my $Priv = $Propstat->{"{$NS_D}prop"}{"{$NS_D}current-user-privilege-set"}{"{$NS_D}privilege"};
       $Priv = [] unless ($Priv and ref($Priv) eq 'ARRAY');
       foreach my $item (@$Priv) {
@@ -627,6 +629,13 @@ sub GetCalendars {
         $Privileges{'mayWrite'} = $JSON::true if $item->{"{$NS_D}write-content"};
         $Privileges{'mayRead'} = $JSON::true if $item->{"{$NS_D}read"};
         $Privileges{'mayReadFreeBusy'} = $JSON::true if $item->{"{$NS_C}read-free-busy"};
+      }
+
+      my $CanEvent;
+      my $Type = $Propstat->{"{$NS_D}prop"}{"{$NS_C}supported-calendar-data"}{"{$NS_C}calendar-data"};
+      $Type = [] unless ($Type and ref($Type) eq 'ARRAY');
+      foreach my $item (@$Type) {
+        $CanEvent = 1 if $item->{"-content-type"} eq "application/event+json";
       }
 
       # XXX - temporary compat
@@ -672,6 +681,7 @@ sub GetCalendars {
         precedence => int($Propstat->{"{$NS_D}prop"}{"{$NS_A}calendar-order"}{content} || 1),
         syncToken  => ($Propstat->{"{$NS_D}prop"}{"{$NS_D}sync-token"}{content} || ''),
         shareWith  => (@ShareWith ? \@ShareWith : $JSON::false),
+        _can_event => ($CanEvent ? $JSON::true : $JSON::false),
         %Privileges,
       );
 
