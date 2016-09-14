@@ -941,10 +941,20 @@ sub GetEvents {
     my $href = uri_unescape($Response->{"{$NS_D}href"}{content} // '');
     next unless $href;
     foreach my $Propstat (@{$Response->{"{$NS_D}propstat"} || []}) {
-      my $Data = $Propstat->{"{$NS_D}prop"}{"{$NS_C}calendar-data"}{content};
+      my $Prop = $Propstat->{"{$NS_D}prop"}{"{$NS_C}calendar-data"};
+      my $Data = $Prop->{content};
       next unless $Data;
 
-      my ($Event) = eval { $Self->vcalendarToEvents($Data) };
+      my $Event;
+
+      if ($Prop->{'-content-type'} and $Prop->{'-content-type'} =~ m{application/event\+json}) {
+        # JSON event is in API format already
+        $Event = eval { decode_json($Data) };
+      }
+      else {
+        # returns an array, but there should only be one UID per file
+        ($Event) = eval { $Self->vcalendarToEvents($Data) };
+      }
 
       if ($@) {
         push @Errors, $@;
@@ -1104,6 +1114,14 @@ sub SyncEvents {
     push @Annotations, x($name);
   }
 
+  my %CalProps;
+  if ($Args{ContentType}) {
+    $CalProps{'content-type'} = $Args{ContentType};
+  }
+  if ($Args{Version}) {
+    $CalProps{'version'} = $Args{Version};
+  }
+
   my $Response = $Self->Request(
     'REPORT',
     "$calendarId/",
@@ -1112,7 +1130,7 @@ sub SyncEvents {
       x('D:sync-level', 1),
       x('D:prop',
         x('D:getetag'),
-        x('C:calendar-data'),
+        x('C:calendar-data', \%CalProps),
         @Annotations,
       ),
     ),
@@ -1135,10 +1153,20 @@ sub SyncEvents {
     foreach my $Propstat (@{$Response->{"{$NS_D}propstat"} || []}) {
       my $status = $Propstat->{"{$NS_D}status"}{content};
       if ($status =~ m/ 200 /) {
-        my $Data = $Propstat->{"{$NS_D}prop"}{"{$NS_C}calendar-data"}{content};
+        my $Prop = $Propstat->{"{$NS_D}prop"}{"{$NS_C}calendar-data"};
+        my $Data = $Prop->{content};
         next unless $Data;
 
-        my ($Event) = eval { $Self->vcalendarToEvents($Data) };
+        my $Event;
+
+        if ($Prop->{'-content-type'} and $Prop->{'-content-type'} =~ m{application/event\+json}) {
+          # JSON event is in API format already
+          $Event = eval { decode_json($Data) };
+        }
+        else {
+          # returns an array, but there should only be one UID per file
+          ($Event) = eval { $Self->vcalendarToEvents($Data) };
+        }
 
         if ($@) {
           push @Errors, $@;
@@ -1200,6 +1228,8 @@ sub NewEvent {
 
   confess "invalid event" unless ref($Args) eq 'HASH';
 
+  my $UseEvent = delete $Args->{_put_event_json};
+
   # calculate updated sequence numbers
   unless (exists $Args->{sequence}) {
     $Args->{sequence} = 1;
@@ -1216,19 +1246,28 @@ sub NewEvent {
   }
 
   $Args->{uid} //= $Self->genuuid();
-  my $VCalendar = $Self->_argsToVCalendar($Args);
-
   my $uid = $Args->{uid};
   my $path = $uid;
   $path =~ tr/[a-zA-Z0-9\@\.\_\-]//cd;
   my $href = "$calendarId/$path.ics";
 
-  $Self->Request(
-    'PUT',
-    $href,
-    $VCalendar->as_string(),
-    'Content-Type'  => 'text/calendar',
-  );
+  if ($UseEvent) {
+    $Self->Request(
+      'PUT',
+      $href,
+      encode_json($Args),
+      'Content-Type'  => 'application/event+json',
+    );
+  }
+  else {
+    my $VCalendar = $Self->_argsToVCalendar($Args);
+    $Self->Request(
+      'PUT',
+      $href,
+      $VCalendar->as_string(),
+      'Content-Type'  => 'text/calendar',
+    );
+  }
 
   return $href;
 }
@@ -1243,15 +1282,27 @@ and it takes the full href to the card instead of the containing calendar.
 sub UpdateEvent {
   my ($Self, $href, $Args) = @_;
 
-  my ($OldEvent, $NewEvent) = $Self->_updateEvent($href, $Args);
-  my $NewVCalendar          = $Self->_argsToVCalendar($NewEvent);
+  my $UseEvent = delete $Args->{_put_event_json};
 
-  $Self->Request(
-    'PUT',
-    $href,
-    $NewVCalendar->as_string(),
-    'Content-Type' => 'text/calendar',
-  );
+  my ($OldEvent, $NewEvent) = $Self->_updateEvent($href, $Args);
+
+  if ($UseEvent) {
+    $Self->Request(
+      'PUT',
+      $href,
+      encode_json($NewEvent),
+      'Content-Type'  => 'application/event+json',
+    );
+  }
+  else {
+    my $VCalendar = $Self->_argsToVCalendar($NewEvent);
+    $Self->Request(
+      'PUT',
+      $href,
+      $VCalendar->as_string(),
+      'Content-Type'  => 'text/calendar',
+    );
+  }
 
   return 1;
 }
