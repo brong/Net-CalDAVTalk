@@ -64,6 +64,7 @@ my (
   %RecurrenceProperties,
   %UTCLinks,
   %MustBeTopLevel,
+  %EventKeys,
 );
 
 BEGIN {
@@ -116,6 +117,94 @@ BEGIN {
     organizer
     attachments
   };
+
+  %EventKeys = (
+    '' => {
+      uid                  => [0, 'string',    1, undef],
+      relatedTo            => [0, 'string',    0, undef],
+      prodId               => [0, 'string',    0, undef],
+      created              => [0, 'utcdate',   0, undef],
+      updated              => [0, 'utcdate',   1, undef],
+      sequence             => [0, 'number',    0, undef],
+      title                => [0, 'string',    0, ''],
+      description          => [0, 'string',    0, ''],
+      links                => [0, 'object',    0, undef],
+      locale               => [0, 'string',    0, undef],
+      localizations        => [0, 'patch',     0, undef],
+      locations            => [0, 'object',    0, undef],
+      isAllDay             => [0, 'bool',      0, $JSON::false],
+      start                => [0, 'localdate', 1, undef],
+      timeZone             => [0, 'timezone',  0, undef],
+      duration             => [0, 'duration',  0, undef],
+      recurrenceRule       => [0, 'object',    0, undef],
+      recurrenceOverrides  => [0, 'patch',     0, undef],
+      status               => [0, 'string',    0, undef],
+      showAsFree           => [0, 'bool',      0, undef],
+      replyTo              => [0, 'hash',      0, undef],
+      participants         => [0, 'object',    0, undef],
+      useDefaultAlerts     => [0, 'bool',      0, $JSON::false],
+      alerts               => [0, 'object',    0, undef],
+    },
+    links => {
+      href                 => [0, 'string',    1, undef],
+      type                 => [0, 'string',    0, undef],
+      size                 => [0, 'number',    0, undef],
+      rel                  => [0, 'string',    1, undef],
+      title                => [0, 'string',    1, undef],
+      properties           => [0, 'string',    1, undef],
+    },
+    locations => {
+      name                 => [0, 'string',    0, undef],
+      accessInstructions   => [0, 'string',    0, undef],
+      rel                  => [0, 'string',    0, 'unknown'],
+      timeZone             => [0, 'timezone',  0, undef],
+      address              => [0, 'object',    0, undef],
+      coordinates          => [0, 'string',    0, undef],
+      uri                  => [0, 'string',    0, undef],
+    },
+    recurrenceRule => {
+      frequency            => [0, 'string',    1, undef],
+      interval             => [0, 'number',    0, undef],
+      rscale               => [0, 'string',    0, 'gregorian'],
+      skip                 => [0, 'string',    0, 'omit'],
+      firstDayOfWeek       => [0, 'string',    0, 'monday'],
+      byDay                => [1, 'object',    0, undef],
+      byDate               => [1, 'number',    0, undef],
+      byMonth              => [1, 'string',    0, undef],
+      byYearDay            => [1, 'number',    0, undef],
+      byWeekNo             => [1, 'number',    0, undef],
+      byHour               => [1, 'number',    0, undef],
+      byMinute             => [1, 'number',    0, undef],
+      bySecond             => [1, 'number',    0, undef],
+      bySetPosition        => [1, 'number',    0, undef],
+      count                => [0, 'number',    0, undef],
+      until                => [0, 'localdate', 0, undef],
+    },
+    byDay => {
+      day                  => [0, 'string',    1, undef],
+      nthOfPeriod          => [0, 'number',    0, undef],
+    },
+    participants => {
+      name                 => [0, 'string',    1, undef],
+      email                => [0, 'string',    1, undef],
+      kind                 => [0, 'string',    0, 'unknown'],
+      roles                => [1, 'string',    1, undef],
+      locationId           => [0, 'string',    0, undef],
+      scheduleStatus       => [0, 'string',    0, 'needs-action'],
+      schedulePriority     => [0, 'string',    0, 'required'],
+      scheduleRSVP         => [0, 'bool',      0, $JSON::false],
+      scheduleUpdated      => [0, 'utcdate',   0, undef],
+      memberOf             => [1, 'string',    0, undef],
+    },
+    alerts => {
+      relativeTo           => [0, 'string',    0, 'before-start'],
+      offset               => [0, 'duration',  1, undef],
+      action               => [0, 'object',    1, undef],
+    },
+    action => {
+      type                 => [0, 'string',    1, undef],
+    },
+  );
 
   %RecurrenceProperties = (
     bymonthday => {
@@ -635,7 +724,8 @@ sub GetCalendars {
       my $Type = $Propstat->{"{$NS_D}prop"}{"{$NS_C}supported-calendar-data"}{"{$NS_C}calendar-data"};
       $Type = [] unless ($Type and ref($Type) eq 'ARRAY');
       foreach my $item (@$Type) {
-        $CanEvent = 1 if $item->{"-content-type"} eq "application/event+json";
+        next unless $item->{"\@content-type"};
+        $CanEvent = 1 if $item->{"\@content-type"}{content} eq "application/event+json";
       }
 
       # XXX - temporary compat
@@ -1617,6 +1707,32 @@ sub _make_duration {
   }
 
   return join ('', @bits);
+}
+
+sub NormaliseEvent {
+  my ($class, $Event, $Root) = @_;
+
+  $Root ||= '';
+
+  my %Copy = %$Event;
+
+  # XXX: patches need to be normalised as well...
+  my $Spec = $EventKeys{$Root};
+  foreach my $key (keys %$Event) {
+    delete $Copy{$key} unless $Spec->{$key};
+  }
+  foreach my $key (sort keys %$Spec) {
+    # remove if it's the default
+    if ($Spec->{$key}[1] eq 'object') {
+      next unless $Copy{$key}; # no object
+      $Copy{$key} = $class->NormaliseEvent($Copy{$key}, $key);
+    }
+    else {
+      delete $Copy{$key} if _safeeq($Spec->{$key}[3], $Copy{$key});
+    }
+  }
+
+  return \%Copy;
 }
 
 sub _getEventsFromVCalendar {
