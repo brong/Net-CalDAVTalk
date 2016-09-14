@@ -1709,6 +1709,12 @@ sub _make_duration {
   return join ('', @bits);
 }
 
+=head2 $NewEvent = Net::CalDAVTalk->NormaliseEvent($Event);
+
+Doesn't change the original event, but removes any keys which are the same as their default value
+
+=cut
+
 sub NormaliseEvent {
   my ($class, $Event, $Root) = @_;
 
@@ -1739,6 +1745,22 @@ sub NormaliseEvent {
 
   return \%Copy;
 }
+
+=head2 Net::CalDAVTalk->CompareEvents($Event1, $Event2);
+
+Returns true if the events are identical
+
+=cut
+
+sub CompareEvents {
+  my ($class, $Event1, $Event2) = @_;
+
+  my $E1 = $class->NormaliseEvent($Event1);
+  my $E2 = $class->NormaliseEvent($Event2);
+
+  return _safeeq($E1, $E2);
+}
+
 
 sub _getEventsFromVCalendar {
   my ($Self, $VCalendar) = @_;
