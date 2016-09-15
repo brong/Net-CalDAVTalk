@@ -115,10 +115,14 @@ BEGIN {
       recurrenceOverrides  => [0, 'patch',     0, undef],
       status               => [0, 'string',    0, undef],
       showAsFree           => [0, 'bool',      0, undef],
-      replyTo              => [0, 'hash',      0, undef],
+      replyTo              => [0, 'object',    0, undef],
       participants         => [0, 'object',    0, undef],
       useDefaultAlerts     => [0, 'bool',      0, $JSON::false],
       alerts               => [0, 'object',    0, undef],
+    },
+    replyTo => {
+      imip                 => [0, 'mailto',    0, undef],
+      web                  => [0, 'href',      0, undef],
     },
     links => {
       href                 => [0, 'string',    1, undef],
@@ -1713,6 +1717,12 @@ sub NormaliseEvent {
       else {
         $Copy{$key} = $class->NormaliseEvent($Item, $key);
       }
+    }
+    elsif ($Spec->{$key}[1] eq 'bool') {
+      delete $Copy{$key} if !!$Spec->{$key}[3] == !!$Copy{$key};
+    }
+    elsif ($Spec->{$key}[1] eq 'mailto') {
+      $Copy{$key} = lc $Copy{$key} if $Copy{$key};
     }
     else {
       delete $Copy{$key} if _safeeq($Spec->{$key}[3], $Copy{$key});
