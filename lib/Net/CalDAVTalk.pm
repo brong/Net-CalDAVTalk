@@ -2972,7 +2972,7 @@ sub _add_override {
   my ($override, $prefix, $New, $Old) = @_;
 
   # basic case - it's not an object, so we just override
-  unless (ref($New) eq 'HASH' and ref($Old) eq 'HASH') {
+  if ($ENV{JMAP_ALWAYS_FULL} or ref($New) ne 'HASH' or ref($Old) or 'HASH') {
     $override->{$prefix} = $New;
     return;
   }
