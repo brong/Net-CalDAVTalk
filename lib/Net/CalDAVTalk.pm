@@ -1132,6 +1132,7 @@ sub GetFreeBusy {
 
   my @result;
   my @errors;
+  my $now = DateTime->now();
   foreach my $item (@{$Data->{objects}[0]{objects}}) {
     next unless $item->{type} eq 'vfreebusy';
     foreach my $line (@{$item->{properties}{freebusy}}) {
@@ -1145,13 +1146,14 @@ sub GetFreeBusy {
       } else {
         ($EndTime) = $Self->_makeDateObj($End, 'UTC', 'UTC');
       }
+      my $duration = $Self->_make_duration($EndTime->subtract_datetime($StartTime));
       my $NewEvent = {
         timeZone => 'Etc/UTC',
         start => $StartTime->iso8601(),
-        duration => $Self->_make_duration($EndTime->subtract_datetime($StartTime)),
+        duration => $duration,
         title => ($Args{name} // ''),
         isAllDay => ($IsAllDay ? $JSON::true : $JSON::false),
-        updated => $item->{updated}, # XXX - infoleak?
+        updated => $now->iso8601(),
       };
 
       # Generate a uid that should remain the same for this freebusy entry
@@ -1673,7 +1675,7 @@ sub _make_duration {
     $dtdur->seconds,
   );
 
-  return unless ($w || $d || $H || $M || $S);
+  return 'PT0S' unless ($w || $d || $H || $M || $S);
 
   my @bits = ('P');
   push @bits, ($w, 'W') if $w;
