@@ -1,6 +1,11 @@
 Revision history for Net-CalDAVTalk
 
-0.08
+0.09    Fri Oct 14 11:49 2016
+   - fix freebusy parsing for zero length events and updated stamp
+   - add JMAP_ALWAYS_FULL environment variable to suppress deep
+     diff creation
+
+0.08    Fri Oct 14 09:20 2016
   - major rewrite to support the new TC-API from CalConnect which
     will be part of the JMAP specification, including tests
 
