@@ -2189,9 +2189,9 @@ sub _getEventsFromVCalendar {
       if ($Properties{'recurrence-id'}{value}) {
         # in our system it's always in the timezone of the event, but iCloud
         # returns it in UTC despite the event having a timezone.  Super weird.
-        # Anyway, we need to format it to StartTimeZone to match everything else.
-        my $Date = $Self->_getDateObj($Calendar, $Properties{'recurrence-id'}, $StartTimeZone);
-        $Event{_recurrenceId} = $Date->iso8601();
+        # Anyway, we need to format it to the StartTimeZone of the parent
+        # event if there is one, and we don't have that yet!
+        $Event{_recurrenceObj} = $Self->_getDateObj($Calendar, $Properties{'recurrence-id'});
       }
       push @Events, \%Event;
     }
@@ -2373,7 +2373,7 @@ sub _makeLTime {
 
 sub _argsToVEvents {
   my $Self = shift;
-  my ($TimeZones, $Args, $recurrenceId) = @_;
+  my ($TimeZones, $Args, $recurrenceData) = @_;
   my @VEvents;
 
   my $VEvent = Data::ICal::Entry::Event->new();
@@ -2385,8 +2385,9 @@ sub _argsToVEvents {
     transp   => ($Args->{showAsFree} ? 'TRANSPARENT' : 'OPAQUE'),
   );
 
-  if ($recurrenceId) {
-    $VEvent->add_property('recurrence-id' => $Self->_makeLTime($TimeZones, $recurrenceId, $Args->{timeZone}, $Args->{isAllDay}));
+  if ($recurrenceData) {
+    my ($recurrenceId, $TopLevel) = @$recurrenceData;
+    $VEvent->add_property('recurrence-id' => $Self->_makeLTime($TimeZones, $recurrenceId, $TopLevel->{timeZone}, $TopLevel->{isAllDay}));
   }
 
   # direct copy if properties exist
@@ -2444,7 +2445,7 @@ sub _argsToVEvents {
       if ($val) {
         if (keys %$val) {
           my $SubEvent = $Self->_maximise($Args, $val, $recurrenceId);
-          push @VEvents, $Self->_argsToVEvents($TimeZones, $SubEvent, $recurrenceId);
+          push @VEvents, $Self->_argsToVEvents($TimeZones, $SubEvent, [$recurrenceId, $Args]);
         }
         else {
           $VEvent->add_property(rdate => $Self->_makeLTime($TimeZones, $recurrenceId, $StartTimeZone, $Args->{isAllDay}));
@@ -2849,9 +2850,8 @@ sub vcalendarToEvents {
 
   foreach my $Event (@$Events) {
     my $uid = $Event->{uid};
-    my $recurrenceId = delete $Event->{'_recurrenceId'};
-    if ($recurrenceId) {
-      $exceptions{$uid}{$recurrenceId} = $Event;
+    if ($Event->{_recurrenceObj}) {
+      push @{$exceptions{$uid}}, $Event;
     }
     elsif ($map{$uid}) {
       # it looks like sometimes Google doesn't remember to put the Recurrence ID
@@ -2859,8 +2859,8 @@ sub vcalendarToEvents {
       # pretty badly because if the date has changed, then we can't even notice
       # which recurrent it was SUPPOSED to be.  *sigh*.
       warn "DUPLICATE EVENT FOR $uid\n" . Dumper($map{$uid}, $Event);
+      push @{$exceptions{$uid}}, $Event;
       $map{$uid}{_dirty} = 1;
-      $exceptions{$uid}{$Event->{start}} = $Event;
     }
     else {
       $map{$uid} = $Event;
@@ -2870,8 +2870,7 @@ sub vcalendarToEvents {
   foreach my $uid (keys %exceptions) {
     unless ($map{$uid}) {
       # create a synthetic top-level
-      my ($first) = sort keys %{$exceptions{$uid}};
-      my $First = $exceptions{$uid}{$first};
+      my $First = $exceptions{$uid}[0];
       $map{$uid} = {
         uid => $uid,
         # these two are required at top level, but may be different
@@ -2879,12 +2878,19 @@ sub vcalendarToEvents {
         start => $First->{start},
         updated => $First->{updated},
       };
+      $map{$uid}{timeZone} = $First->{timeZone} unless $First->{isAllDay};
       foreach my $key (keys %MustBeTopLevel) {
         $map{$uid}{$key} = $First->{$key} if exists $First->{$key};
       }
     }
-    foreach my $recurrenceId (sort keys %{$exceptions{$uid}}) {
-      _insert_override($map{$uid}, $recurrenceId, $exceptions{$uid}{$recurrenceId});
+    foreach my $SubEvent (@{$exceptions{$uid}}) {
+      my $recurrenceId = $SubEvent->{start};
+      if ($SubEvent->{_recurrenceObj}) {
+        my $Date = delete $SubEvent->{_recurrenceObj};
+        $Date->set_time_zone($map{$uid}{timeZone}) if $map{$uid}{timeZone};
+        $recurrenceId = $Date->iso8601();
+      }
+      _insert_override($map{$uid}, $recurrenceId, $SubEvent);
     }
   }
 
