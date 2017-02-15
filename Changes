@@ -1,5 +1,9 @@
 Revision history for Net-CalDAVTalk
 
+0.10    Wed Feb 15 16:46 2017
+   - set the timezone on recurrences based on the top level timezone, not
+     the recurrence timezone
+
 0.09    Fri Oct 14 11:49 2016
    - fix freebusy parsing for zero length events and updated stamp
    - add JMAP_ALWAYS_FULL environment variable to suppress deep

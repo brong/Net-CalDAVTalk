@@ -411,11 +411,11 @@ Net::CalDAVTalk - Module to talk CalDAV and give a JSON interface to the data
 
 =head1 VERSION
 
-Version 0.09
+Version 0.10
 
 =cut
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 
 
 =head1 SYNOPSIS
