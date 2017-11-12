@@ -24,6 +24,8 @@ use MIME::Types;
 use Digest::SHA qw(sha1_hex);
 use URI::Escape qw(uri_unescape);
 
+our $BATCHSIZE = 100;
+
 # monkey patch like a bandit
 BEGIN {
   my @properties = Data::ICal::Entry::Alarm::optional_unique_properties();
@@ -945,48 +947,46 @@ e.g.
 sub GetEvents {
   my ($Self, $calendarId, %Args) = @_;
 
-  # validate parameters {{{
+  my $urls = $Self->GetEventLinks($calendarId, %Args);
+
+  my @AllUrls = sort keys %$urls;
+
+  my ($Events, $Errors, $Links) = $Self->GetEventsMulti($calendarId, \@AllUrls, %Args);
+
+  return wantarray ? ($Events, $Errors, $Links) : $Events;
+}
+
+=head2 $self->GetEventsMulti($calendarId, $Urls, %Args)
+
+Fetches the events in Urs from the calendar
+
+Supported args:
+
+  * ContentType
+  * Version
+
+For the calendar-data response
+
+In scalar context returns an arrayref of events.  In list context
+returns an array of:
+
+* arrayref of events
+* arrayref of errors:
+* hash of href to getetag
+
+=cut
+
+sub GetEventsMulti {
+  my ($Self, $calendarId, $Urls, %Args) = @_;
 
   confess "Need a calendarId" unless $calendarId;
 
-  my @Query;
-  my $TopLevel = 'C:calendar-query';
-  my $Filter;
-  if ($Args{href}) {
-    $TopLevel = 'C:calendar-multiget';
-    $Filter = x('D:href', $Args{href});
-  }
-  elsif ($Args{AlwaysRange} || $Args{after} || $Args{before}) {
-    my $Start = _wireDate($Args{after} || $BoT);
-    my $End = _wireDate($Args{before} || $EoT);
-
-    $Filter = x('C:filter',
-      x('C:comp-filter', { name => 'VCALENDAR' },
-        x('C:comp-filter', { name => 'VEVENT' },
-          x('C:time-range', {
-            start => $Start->strftime('%Y%m%dT000000Z'),
-            end   => $End->strftime('%Y%m%dT000000Z'),
-          }),
-        ),
-      ),
-    );
-  }
-  else {
-    $Filter = x('C:filter',
-      x('C:comp-filter', { name => 'VCALENDAR' },
-        x('C:comp-filter', { name => 'VEVENT' },
-        ),
-      ),
-    );
-  }
   my @Annotations;
   my $AnnotNames = $Args{Annotations} || [];
   foreach my $key (@$AnnotNames) {
     my $name = ($key =~ m/:/ ? $key : "C:$key");
     push @Annotations, x($name);
   }
-
-  # }}}
 
   my %CalProps;
   if ($Args{ContentType}) {
@@ -996,22 +996,126 @@ sub GetEvents {
     $CalProps{'version'} = $Args{Version};
   }
 
+  my (@Events, @Errors, %Links);
+
+  while (my @urls = splice(@$Urls, 0, $BATCHSIZE)) {
+    my $Response = $Self->Request(
+      'REPORT',
+      "$calendarId/",
+      x('C:calendar-multiget', $Self->NS(),
+        x('D:prop',
+          x('C:calendar-data', \%CalProps),
+          x('D:getetag'),
+          @Annotations,
+        ),
+        map { x('D:href', $_) } @urls,
+
+      ),
+      Depth => 1,
+    );
+
+    my $NS_A = $Self->ns('A');
+    my $NS_C = $Self->ns('C');
+    my $NS_D = $Self->ns('D');
+    foreach my $Response (@{$Response->{"{$NS_D}response"} || []}) {
+      my $href = uri_unescape($Response->{"{$NS_D}href"}{content} // '');
+      next unless $href;
+      foreach my $Propstat (@{$Response->{"{$NS_D}propstat"} || []}) {
+        my $etag = $Propstat->{"{$NS_D}prop"}{"{$NS_D}getetag"}{content};
+        $Links{$href} = $etag;
+        my $Prop = $Propstat->{"{$NS_D}prop"}{"{$NS_C}calendar-data"};
+        my $Data = $Prop->{content};
+        next unless $Data;
+
+        my $Event;
+
+        if ($Prop->{'-content-type'} and $Prop->{'-content-type'} =~ m{application/event\+json}) {
+          # JSON event is in API format already
+          $Event = eval { decode_json($Data) };
+        }
+        else {
+          # returns an array, but there should only be one UID per file
+          ($Event) = eval { $Self->vcalendarToEvents($Data) };
+        }
+
+        if ($@) {
+          push @Errors, $@;
+          next;
+        }
+        next unless $Event;
+
+        if ($Args{Full}) {
+          $Event->{_raw} = $Data;
+        }
+
+        $Event->{href} = $href;
+        $Event->{id} = $Self->shortpath($href);
+
+        foreach my $key (@$AnnotNames) {
+          my $propns = $NS_C;
+          my $name = $key;
+          if ($key =~ m/(.*):(.*)/) {
+            $name = $2;
+            $propns = $Self->ns($1);
+          }
+          my $AData = $Propstat->{"{$NS_D}prop"}{"{$propns}$name"}{content};
+          next unless $AData;
+          $Event->{annotation}{$name} = $AData;
+        }
+
+        push @Events, $Event;
+      }
+    }
+  }
+
+  return wantarray ? (\@Events, \@Errors, \%Links) : \@Events;
+}
+
+=head2 $self->GetEventLinks($calendarId, %Args)
+
+Fetches the URLs of calendar events in a calendar.
+
+Supported args:
+
+  after+before => ISO8601 - date range to query
+
+returns a hash of href to etag
+
+=cut
+
+sub GetEventLinks {
+  my ($Self, $calendarId, %Args) = @_;
+  confess "Need a calendarId" unless $calendarId;
+
+  my @Extra;
+  if ($Args{AlwaysRange} || $Args{after} || $Args{before}) {
+    my $Start = _wireDate($Args{after} || $BoT);
+    my $End = _wireDate($Args{before} || $EoT);
+    push @Extra, x('C:time-range', {
+      start => $Start->strftime('%Y%m%dT000000Z'),
+      end   => $End->strftime('%Y%m%dT000000Z'),
+    });
+  }
+
   my $Response = $Self->Request(
     'REPORT',
     "$calendarId/",
-    x($TopLevel, $Self->NS(),
+    x('C:calendar-query', $Self->NS(),
       x('D:prop',
-        x('C:calendar-data', \%CalProps),
-        @Annotations,
+        x('D:getetag'),
       ),
-      $Filter,
+      x('C:filter',
+        x('C:comp-filter', { name => 'VCALENDAR' },
+          x('C:comp-filter', { name => 'VEVENT' },
+            @Extra,
+          ),
+        ),
+      ),
     ),
     Depth => 1,
   );
 
-  return $Response if $Args{Raw};
-
-  my (@Events, @Errors);
+  my (%Links, @Errors);
 
   my $NS_A = $Self->ns('A');
   my $NS_C = $Self->ns('C');
@@ -1020,51 +1124,12 @@ sub GetEvents {
     my $href = uri_unescape($Response->{"{$NS_D}href"}{content} // '');
     next unless $href;
     foreach my $Propstat (@{$Response->{"{$NS_D}propstat"} || []}) {
-      my $Prop = $Propstat->{"{$NS_D}prop"}{"{$NS_C}calendar-data"};
-      my $Data = $Prop->{content};
-      next unless $Data;
-
-      my $Event;
-
-      if ($Prop->{'-content-type'} and $Prop->{'-content-type'} =~ m{application/event\+json}) {
-        # JSON event is in API format already
-        $Event = eval { decode_json($Data) };
-      }
-      else {
-        # returns an array, but there should only be one UID per file
-        ($Event) = eval { $Self->vcalendarToEvents($Data) };
-      }
-
-      if ($@) {
-        push @Errors, $@;
-        next;
-      }
-      next unless $Event;
-
-      if ($Args{Full}) {
-        $Event->{_raw} = $Data;
-      }
-
-      $Event->{href} = $href;
-      $Event->{id} = $Self->shortpath($href);
-
-      foreach my $key (@$AnnotNames) {
-        my $propns = $NS_C;
-        my $name = $key;
-        if ($key =~ m/(.*):(.*)/) {
-          $name = $2;
-          $propns = $Self->ns($1);
-        }
-        my $AData = $Propstat->{"{$NS_D}prop"}{"{$propns}$name"}{content};
-        next unless $AData;
-        $Event->{annotation}{$name} = $AData;
-      }
-
-      push @Events, $Event;
+      my $etag = $Propstat->{"{$NS_D}prop"}{"{$NS_D}getetag"}{content};
+      $Links{$href} = $etag;
     }
   }
 
-  return wantarray ? (\@Events, \@Errors) : \@Events;
+  return \%Links;
 }
 
 =head2 $self->GetEvent($href)
@@ -1080,7 +1145,7 @@ sub GetEvent {
   my $calendarId = $href;
   $calendarId =~ s{/[^/]*$}{};
 
-  my ($Events, $Errors) = $Self->GetEvents($calendarId, %Args, href => $Self->fullpath($href));
+  my ($Events, $Errors) = $Self->GetEventsMulti($calendarId, [$Self->fullpath($href)], %Args);
 
   die "Errors @$Errors" if @$Errors;
   die "Multiple items returned for $href" if @$Events > 1;
@@ -1186,22 +1251,20 @@ e.g.
 sub SyncEvents {
   my ($Self, $calendarId, %Args) = @_;
 
+  my ($Added, $Removed, $Errors, $SyncToken) = $Self->SyncEventLinks($calendarId, %Args);
+
+  my @AllUrls = sort keys %$Added;
+
+  my ($Events, $ThisErrors, $Links) = $Self->GetEventsMulti($calendarId, \@AllUrls, %Args);
+  push @$Errors, @$ThisErrors;
+
+  return wantarray ? ($Events, $Removed, $Errors, $SyncToken, $Links) : $Events;
+}
+
+sub SyncEventLinks {
+  my ($Self, $calendarId, %Args) = @_;
+
   confess "Need a calendarId" unless $calendarId;
-
-  my @Annotations;
-  my $AnnotNames = $Args{Annotations} || [];
-  foreach my $key (@$AnnotNames) {
-    my $name = ($key =~ m/:/ ? $key : "C:$key");
-    push @Annotations, x($name);
-  }
-
-  my %CalProps;
-  if ($Args{ContentType}) {
-    $CalProps{'content-type'} = $Args{ContentType};
-  }
-  if ($Args{Version}) {
-    $CalProps{'version'} = $Args{Version};
-  }
 
   my $Response = $Self->Request(
     'REPORT',
@@ -1211,70 +1274,32 @@ sub SyncEvents {
       x('D:sync-level', 1),
       x('D:prop',
         x('D:getetag'),
-        x('C:calendar-data', \%CalProps),
-        @Annotations,
       ),
     ),
   );
 
-  my (@Events, @Removed, @Errors);
-
   my $NS_A = $Self->ns('A');
   my $NS_C = $Self->ns('C');
   my $NS_D = $Self->ns('D');
+
+  my $SyncToken = $Response->{"{$NS_D}sync-token"}{content};
+  confess "NO SYNC TOKEN RETURNED " . Dumper($Response) unless $SyncToken;
+
+  my (%Added, @Removed, @Errors);
   foreach my $Response (@{$Response->{"{$NS_D}response"} || []}) {
     my $href = uri_unescape($Response->{"{$NS_D}href"}{content} // '');
     next unless $href;
 
     unless ($Response->{"{$NS_D}propstat"}) {
-      push @Removed, $Self->shortpath($href);
+      push @Removed, $href;
       next;
     }
 
     foreach my $Propstat (@{$Response->{"{$NS_D}propstat"} || []}) {
       my $status = $Propstat->{"{$NS_D}status"}{content};
       if ($status =~ m/ 200 /) {
-        my $Prop = $Propstat->{"{$NS_D}prop"}{"{$NS_C}calendar-data"};
-        my $Data = $Prop->{content};
-        next unless $Data;
-
-        my $Event;
-
-        if ($Prop->{'-content-type'} and $Prop->{'-content-type'} =~ m{application/event\+json}) {
-          # JSON event is in API format already
-          $Event = eval { decode_json($Data) };
-        }
-        else {
-          # returns an array, but there should only be one UID per file
-          ($Event) = eval { $Self->vcalendarToEvents($Data) };
-        }
-
-        if ($@) {
-          push @Errors, $@;
-          next;
-        }
-        next unless $Event;
-
-        if ($Args{Full}) {
-          $Event->{_raw} = $Data;
-        }
-
-        $Event->{href} = $href;
-        $Event->{id} = $Self->shortpath($href);
-
-        foreach my $key (@$AnnotNames) {
-          my $propns = $NS_C;
-          my $name = $key;
-          if ($key =~ m/(.*):(.*)/) {
-            $name = $2;
-            $propns = $Self->ns($1);
-          }
-          my $AData = $Propstat->{"{$NS_D}prop"}{"{$propns}$name"}{content};
-          next unless $AData;
-          $Event->{annotation}{$name} = $AData;
-        }
-
-        push @Events, $Event;
+        my $etag = $Propstat->{"{$NS_D}prop"}{"{$NS_D}getetag"}{content};
+        $Added{$href} = $etag;
       }
       else {
         push @Errors, "Odd status $status";
@@ -1282,7 +1307,7 @@ sub SyncEvents {
     }
   }
 
-  return wantarray ? (\@Events, \@Removed, \@Errors) : \@Events;
+  return (\%Added, \@Removed, \@Errors, $SyncToken);
 }
 
 =head2 $self->NewEvent($calendarId, $Args)
