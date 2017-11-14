@@ -1261,6 +1261,27 @@ sub SyncEvents {
   return wantarray ? ($Events, $Removed, $Errors, $SyncToken, $Links) : $Events;
 }
 
+=head2 $self->SyncEventLinks($calendarId, %Args)
+
+Like GetEventLinks, but if you pass a syncToken argument, then it will
+fetch changes since that token (obtained from an earlier GetCalendars
+or SyncEvent* call).
+
+In scalar context still just returns Added, in list context returns
+Added, Removed, Errors and new token:
+
+* Added: hash of href to etag - added or changed
+* Removed: array of href
+* Errors: array of descritive string
+* NewToken: scalar opaque DAV:sync-token
+
+e.g.
+
+   my ($Added, $Removed, $Errors, $NewToken)
+      = $CalDAV->SyncEventLinks('Default', syncToken => '...');
+
+=cut
+
 sub SyncEventLinks {
   my ($Self, $calendarId, %Args) = @_;
 
