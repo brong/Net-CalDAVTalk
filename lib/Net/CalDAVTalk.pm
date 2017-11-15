@@ -701,6 +701,14 @@ sub GetCalendars {
         $Privileges{'mayReadFreeBusy'} = $JSON::true if $item->{"{$NS_C}read-free-busy"};
       }
 
+      my $CanSync;
+      my $Report = $Propstat->{"{$NS_D}prop"}{"{$NS_D}supported-report-set"}{"{$NS_D}supported-report"};
+      $Report = [] unless ($Report and ref($Report) eq 'ARRAY');
+      foreach my $item (@$Report) {
+        # XXX - do we want to check the other things too?
+        $CanSync = 1 if $item->{"{$NS_D}report"}{"{$NS_D}sync-collection"};
+      }
+
       my $CanEvent;
       my $Type = $Propstat->{"{$NS_D}prop"}{"{$NS_C}supported-calendar-data"}{"{$NS_C}calendar-data"};
       $Type = [] unless ($Type and ref($Type) eq 'ARRAY');
@@ -752,6 +760,7 @@ sub GetCalendars {
         precedence => int($Propstat->{"{$NS_D}prop"}{"{$NS_A}calendar-order"}{content} || 1),
         syncToken  => ($Propstat->{"{$NS_D}prop"}{"{$NS_D}sync-token"}{content} || ''),
         shareWith  => (@ShareWith ? \@ShareWith : $JSON::false),
+        canSync    => ($CanSync ? $JSON::true : $JSON::false),
         _can_event => ($CanEvent ? $JSON::true : $JSON::false),
         %Privileges,
       );
