@@ -1229,7 +1229,6 @@ sub GetFreeBusy {
     }
   }
 
-  warn Dumper(\@result);
   return (\@result, \@errors);
 }
 
@@ -1905,7 +1904,6 @@ sub _getEventsFromVCalendar {
           $Recurrence{frequency} = $freq;
         }
         else {
-          use Data::Dumper;
           confess "$uid: Recurrence FREQ not specified";
         }
 
