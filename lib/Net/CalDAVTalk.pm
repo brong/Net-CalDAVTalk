@@ -413,11 +413,11 @@ Net::CalDAVTalk - Module to talk CalDAV and give a JSON interface to the data
 
 =head1 VERSION
 
-Version 0.12
+Version 0.13
 
 =cut
 
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 
 
 =head1 SYNOPSIS
@@ -1452,15 +1452,17 @@ sub _updateEvent {
 
   my %NewEvent;
 
-  foreach my $Property (keys %EventKeys) {
-    if (exists $Args->{$Property}) {
-      if (defined $Args->{$Property}) {
-        $NewEvent{$Property} = $Args->{$Property};
+  foreach my $PropertyGroup (keys %EventKeys) {
+      foreach my $Property (keys %{ $EventKeys{$PropertyGroup} }) {
+	  if (exists $Args->{$Property}) {
+	      if (defined $Args->{$Property}) {
+		  $NewEvent{$Property} = $Args->{$Property};
+	      }
+	  }
+	  elsif (exists $OldEvent->{$Property}) {
+	      $NewEvent{$Property} = $OldEvent->{$Property};
+	  }
       }
-    }
-    elsif (exists $OldEvent->{$Property}) {
-      $NewEvent{$Property} = $OldEvent->{$Property};
-    }
   }
 
   # calculate updated sequence numbers
