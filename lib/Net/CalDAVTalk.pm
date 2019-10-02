@@ -646,6 +646,7 @@ sub GetCalendars {
     'D:acl',
     'A:calendar-order',
     'C:calendar-timezone',
+    'C:supported-calendar-component-set',
     'D:sync-token',
     'D:supported-report-set',
     'C:supported-calendar-data',
@@ -750,6 +751,13 @@ sub GetCalendars {
         push @ShareWith, \%ShareObject;
       }
 
+      my $compset_prop = $Propstat->{"{$NS_D}prop"}{"{$NS_C}supported-calendar-component-set"}{"{$NS_C}comp"};
+
+      my $compset = ! defined $compset_prop       ? undef
+                  : ref $compset_prop eq 'HASH'   ? [ $compset_prop->{'@name'}{content} ]
+                  : ref $compset_prop eq 'ARRAY'  ? [ map {; $_->{'@name'}{content} } @$compset_prop ]
+                  : undef; # <-- weird, shouldn't happen -- rjbs, 2019-10-01
+
       my %Cal = (
         id         => $calendarId,
         name       => ($Propstat->{"{$NS_D}prop"}{"{$NS_D}displayname"}{content} || $DefaultDisplayName),
@@ -762,6 +770,7 @@ sub GetCalendars {
         shareWith  => (@ShareWith ? \@ShareWith : $JSON::false),
         canSync    => ($CanSync ? $JSON::true : $JSON::false),
         _can_event => ($CanEvent ? $JSON::true : $JSON::false),
+        componentSet => $compset,
         %Privileges,
       );
 
