@@ -2594,7 +2594,9 @@ sub _argsToVEvents {
       next unless grep { $_ eq 'attendee' } @{$Attendee->{roles}};
 
       $AttendeeProps{"CUTYPE"}     = uc $Attendee->{"kind"} if defined $Attendee->{"kind"};
-      $AttendeeProps{"RSVP"}       = uc $Attendee->{"scheduleRSVP"} if defined $Attendee->{"scheduleRSVP"};
+      if( defined $Attendee->{"scheduleRSVP"}) {
+          $AttendeeProps{"RSVP"} = $AttendeeProps{"RSVP"} ? "TRUE" : "FALSE";
+      };
       $AttendeeProps{"X-SEQUENCE"} = $Attendee->{"x-sequence"} if defined $Attendee->{"x-sequence"};
       $AttendeeProps{"X-DTSTAMP"}  = $Self->_makeZTime($Attendee->{"scheduleUpdated"}) if defined $Attendee->{"scheduleUpdated"};
       foreach my $prop (keys %AttendeeProps) {
