@@ -1365,16 +1365,13 @@ sub _updateEvent {
   confess "Error getting old event for $href"
     unless $OldEvent;
 
-  my %NewEvent;
-
-  foreach my $Property (keys %EventKeys) {
-    if (exists $Args->{$Property}) {
-      if (defined $Args->{$Property}) {
-        $NewEvent{$Property} = $Args->{$Property};
-      }
-    }
-    elsif (exists $OldEvent->{$Property}) {
-      $NewEvent{$Property} = $OldEvent->{$Property};
+  # Merge patch onto old event (both are flat JSCalendar hashes)
+  my %NewEvent = %$OldEvent;
+  for my $key (keys %$Args) {
+    if (defined $Args->{$key}) {
+      $NewEvent{$key} = $Args->{$key};
+    } else {
+      delete $NewEvent{$key};
     }
   }
 
@@ -1390,6 +1387,21 @@ sub _updateEvent {
       next if exists $val->{sequence};
 
       my $old = $OldEvent->{exceptions}{$recurrenceId};
+      my $sequence = $NewEvent{sequence};
+      if ($old && exists $old->{sequence}) {
+        $sequence = $old->{sequence} + 1 unless $sequence > $old->{sequence};
+      }
+      $val->{sequence} = $sequence;
+    }
+  }
+
+  if ($NewEvent{recurrenceOverrides}) {
+    foreach my $recurrenceId (sort keys %{$NewEvent{recurrenceOverrides}}) {
+      my $val = $NewEvent{recurrenceOverrides}{$recurrenceId};
+      next unless $val;
+      next if exists $val->{sequence};
+
+      my $old = ($OldEvent->{recurrenceOverrides} || {})->{$recurrenceId};
       my $sequence = $NewEvent{sequence};
       if ($old && exists $old->{sequence}) {
         $sequence = $old->{sequence} + 1 unless $sequence > $old->{sequence};
