@@ -1,5 +1,13 @@
 Revision history for Net-CalDAVTalk
 
+0.15    Thu May  1 2026
+   - Fix _updateEvent: was iterating keys %EventKeys (outer structural
+     keys like '', replyTo, links) instead of merging flat JSCalendar
+     event hashes, causing every UpdateEvent call to silently wipe the
+     event on the CalDAV server
+   - Add sequence number handling for recurrenceOverrides entries
+     alongside existing exceptions handling
+
 0.14    Mon Apr  6 11:11 2026
    - add missing dep on Text::JSCalendar
    - update dep on Net::DAVTalk
