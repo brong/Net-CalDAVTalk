@@ -1391,7 +1391,7 @@ sub _updateEvent {
       if ($old && exists $old->{sequence}) {
         $sequence = $old->{sequence} + 1 unless $sequence > $old->{sequence};
       }
-      $val->{sequence} = $sequence;
+      $val->{sequence} = $sequence if $sequence > $NewEvent{sequence};
     }
   }
 
@@ -1406,7 +1406,7 @@ sub _updateEvent {
       if ($old && exists $old->{sequence}) {
         $sequence = $old->{sequence} + 1 unless $sequence > $old->{sequence};
       }
-      $val->{sequence} = $sequence;
+      $val->{sequence} = $sequence if $sequence > $NewEvent{sequence};
     }
   }
 
