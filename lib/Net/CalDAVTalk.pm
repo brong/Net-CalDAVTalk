@@ -322,11 +322,11 @@ Net::CalDAVTalk - Module to talk CalDAV and give a JSON interface to the data
 
 =head1 VERSION
 
-Version 0.15
+Version 0.16
 
 =cut
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 
 
 =head1 SYNOPSIS
@@ -1264,6 +1264,17 @@ Returns the href, but also updates 'uid' in $Args.
 
 Also updates 'sequence'.
 
+Special keys consumed from $Args (not stored in the event):
+
+=over 4
+
+=item _no_schedule
+
+If true, sends C<Schedule-Reply: false> on the PUT request, suppressing
+iTIP scheduling replies from the server (RFC 6638 section 8.1).
+
+=back
+
 e.g.
 
     my $href = $CalDAV->NewEvent('Default', $Args);
@@ -1278,7 +1289,9 @@ sub NewEvent {
 
   confess "invalid event" unless ref($Args) eq 'HASH';
 
-  my $UseEvent = delete $Args->{_put_event_json};
+  my $UseEvent    = delete $Args->{_put_event_json};
+  my $no_schedule = delete $Args->{_no_schedule};
+  my @sched_header = $no_schedule ? ('Schedule-Reply' => 'false') : ();
 
   # calculate updated sequence numbers
   unless (exists $Args->{sequence}) {
@@ -1307,6 +1320,7 @@ sub NewEvent {
       $href,
       encode_json($Args),
       'Content-Type'  => 'application/event+json',
+      @sched_header,
     );
   }
   else {
@@ -1316,6 +1330,7 @@ sub NewEvent {
       $href,
       $VCalendar->as_string(),
       'Content-Type'  => 'text/calendar',
+      @sched_header,
     );
   }
 
@@ -1327,12 +1342,16 @@ sub NewEvent {
 Like NewEvent, but you only need to specify keys that you want to change,
 and it takes the full href to the card instead of the containing calendar.
 
+Accepts the same special keys as NewEvent (e.g. C<_no_schedule>).
+
 =cut
 
 sub UpdateEvent {
   my ($Self, $href, $Args) = @_;
 
-  my $UseEvent = delete $Args->{_put_event_json};
+  my $UseEvent    = delete $Args->{_put_event_json};
+  my $no_schedule = delete $Args->{_no_schedule};
+  my @sched_header = $no_schedule ? ('Schedule-Reply' => 'false') : ();
 
   my ($OldEvent, $NewEvent) = $Self->_updateEvent($href, $Args);
 
@@ -1342,6 +1361,7 @@ sub UpdateEvent {
       $href,
       encode_json($NewEvent),
       'Content-Type'  => 'application/event+json',
+      @sched_header,
     );
   }
   else {
@@ -1351,6 +1371,7 @@ sub UpdateEvent {
       $href,
       $VCalendar->as_string(),
       'Content-Type'  => 'text/calendar',
+      @sched_header,
     );
   }
 

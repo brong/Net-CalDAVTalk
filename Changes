@@ -1,5 +1,9 @@
 Revision history for Net-CalDAVTalk
 
+0.16    Sun May  3 2026
+   - Add Schedule-Reply: false header support via _no_schedule flag in
+     NewEvent and UpdateEvent (RFC 6638 §8.1 scheduling suppression)
+
 0.15    Thu May  1 2026
    - Fix _updateEvent: was iterating keys %EventKeys (outer structural
      keys like '', replyTo, links) instead of merging flat JSCalendar
